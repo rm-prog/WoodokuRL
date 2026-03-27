@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-from src.util.shifts import shift_right, shift_down, shift
+from src.util.shifts import shift
 from src.config import GRID_SIZE, BOX_SIZE, BOX_AMOUNT
 
 @jax.jit

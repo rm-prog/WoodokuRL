@@ -16,7 +16,7 @@ class Game:
         print("Woodoku game initialized\n")
 
         while True:
-            print(field)
+            self.print_grid(field)
             if (len(avail_tiles) == 0): avail_tiles = self.generate_tiles(field)
             if (not self.any_tile_playable(field, avail_tiles)): 
                 print("Game over. Cant place tiles\n")
@@ -41,6 +41,19 @@ class Game:
 
         print("Finished!")
 
+    def print_grid(self, grid: jnp.ndarray):
+        grid = jnp.array(grid)
+
+        print("\n   " + " ".join(str(i) for i in range(grid.shape[1])))
+        print("  " + "-" * (grid.shape[1] * 2))
+
+        for i in range(grid.shape[0]):
+            row = ""
+            for j in range(grid.shape[1]):
+                row += "█ " if grid[i, j] != 0 else ". "
+            print(f"{i}| {row}")
+
+        print()
 
     def any_tile_playable(self, field, tiles):
         tiles_stack = jnp.stack(tiles)
