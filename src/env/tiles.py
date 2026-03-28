@@ -66,6 +66,15 @@ def print_tiles(tiles):
 
     print()
 
+TILE_PERMS = jnp.array([
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ])
+
 TILES = [
     pad_to_9x9(jnp.array([[1]])),
 

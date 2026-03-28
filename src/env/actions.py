@@ -5,7 +5,6 @@ from src.config import GRID_SIZE, BOX_SIZE, BOX_AMOUNT
 
 @jax.jit
 def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
-    # shifted = shift_right(shift_down(tile, row), col)
     shifted = shift(tile, row, col)
         
     new_grid = grid + shifted
@@ -20,6 +19,33 @@ def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
     result = jnp.where(valid, new_grid, grid)
         
     return result, valid
+
+def step(grid, tile, action):
+    row = action // GRID_SIZE
+    col = action % GRID_SIZE
+
+    placed_grid, valid = place_tile(grid, tile, row, col)
+
+    row_full = jnp.all(placed_grid != 0, axis=1)
+    col_full = jnp.all(placed_grid != 0, axis=0)
+
+    boxes = jnp.array([
+        grid[i*BOX_SIZE:(i+1)*BOX_SIZE,
+              j*BOX_SIZE:(j+1)*BOX_SIZE]
+        for i in range(BOX_SIZE)
+        for j in range(BOX_SIZE)
+    ]).reshape(BOX_SIZE, BOX_SIZE, BOX_SIZE, BOX_SIZE)
+    box_full = jnp.all(boxes != 0, axis=(2, 3))
+
+    reward = (
+        jnp.sum(row_full) +
+        jnp.sum(col_full) +
+        jnp.sum(box_full)
+    )
+
+    cleared_grid = clear_lines(placed_grid)
+
+    return cleared_grid, valid, reward
     
 def is_valid_placement(grid, tile, row, col):
     _, valid = place_tile(grid, tile, row, col)
@@ -54,10 +80,17 @@ def has_valid_placements(grid, tile):
 
 @jax.jit
 def clear_lines(field: jnp.array):
+
     row_full = jnp.all(field != 0, axis=1).astype(bool)
     col_full = jnp.all(field != 0, axis=0).astype(bool)
 
-    boxes = field.reshape(BOX_SIZE, BOX_SIZE, BOX_SIZE, BOX_SIZE)
+    boxes = jnp.array([
+        field[i*BOX_SIZE:(i+1)*BOX_SIZE,
+              j*BOX_SIZE:(j+1)*BOX_SIZE]
+        for i in range(BOX_SIZE)
+        for j in range(BOX_SIZE)
+    ]).reshape(BOX_SIZE, BOX_SIZE, BOX_SIZE, BOX_SIZE)
+
     box_full = jnp.all(boxes != 0, axis=(2, 3))
 
     box_mask = jnp.kron(box_full, jnp.ones((BOX_SIZE, BOX_SIZE)))
