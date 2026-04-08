@@ -9,8 +9,12 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
+BIG = 1000.0
+
+
 @partial(jax.jit, static_argnames=["score_fn"])
 def greedy_with_order(grid, tiles, score_fn):
+
     actions = jnp.arange(GRID_SIZE * GRID_SIZE)
 
     def solve_for_perm(perm):
@@ -26,28 +30,32 @@ def greedy_with_order(grid, tiles, score_fn):
                 def step3(a3):
                     g3, v3, r3 = step(g2, t3, a3)
 
-                    valid = v1 & v2 & v3
+                    v12 = v1 & v2
+                    v123 = v12 & v3
 
-                    total_score = r1 + r2 + r3 + score_fn(g3)
+                    s1 = r1 + score_fn(g1)
+                    s2 = r1 + r2 + score_fn(g2)
+                    s3 = r1 + r2 + r3 + score_fn(g3)
 
-                    s = jnp.where(valid, total_score, -jnp.inf)
+                    p1 = jnp.where(v1, 1 * BIG + s1, -jnp.inf)
+                    p2 = jnp.where(v12, 2 * BIG + s2, -jnp.inf)
+                    p3 = jnp.where(v123, 3 * BIG + s3, -jnp.inf)
 
-                    return s, a3
+                    best = jnp.maximum(jnp.maximum(p1, p2), p3)
+
+                    return best, a3
 
                 scores3, a3s = jax.vmap(step3)(actions)
-
                 idx3 = jnp.argmax(scores3)
 
                 return scores3[idx3], a2, a3s[idx3]
 
             scores2, a2s, a3s = jax.vmap(step2)(actions)
-
             idx2 = jnp.argmax(scores2)
 
             return scores2[idx2], a1, a2s[idx2], a3s[idx2]
 
         scores1, a1s, a2s, a3s = jax.vmap(step1)(actions)
-
         idx1 = jnp.argmax(scores1)
 
         return (
@@ -63,6 +71,6 @@ def greedy_with_order(grid, tiles, score_fn):
     scores = results[0]
     idx = jnp.argmax(scores)
 
-    best = jax.tree.map(lambda x: x[idx], results)
+    best = jax.tree_util.tree_map(lambda x: x[idx], results)
 
     return best

@@ -41,7 +41,7 @@ def step(grid, tile, action):
         jnp.sum(row_full) +
         jnp.sum(col_full) +
         jnp.sum(box_full)
-    )
+    ) * 9 + jnp.sum(tile == 1)
 
     cleared_grid = clear_lines(placed_grid)
 

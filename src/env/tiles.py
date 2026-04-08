@@ -75,7 +75,7 @@ TILE_PERMS = jnp.array([
         [2, 1, 0],
     ])
 
-TILES = [
+TILES = jnp.stack([
     pad_to_9x9(jnp.array([[1]])),
 
     pad_to_9x9(jnp.array([[1, 1]])),
@@ -245,4 +245,4 @@ TILES = [
     pad_to_9x9(jnp.array([[1, 1],
                           [0, 1],
                           [1, 1]])),
-]
+])
