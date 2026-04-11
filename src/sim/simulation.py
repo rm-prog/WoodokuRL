@@ -5,61 +5,67 @@ from jax import lax
 from src.env.tiles import TILES
 from src.env.actions import step, has_valid_placements
 
-MAX_STEPS = 10
-
-
-@partial(jax.jit, static_argnames=["func"])
-def simulate_games(num_games, func, key):
-
-    def play_step(carry, _):
+@partial(jax.jit, static_argnames=["func", "num_games"])
+def simulate_games(num_games, key, func):
+    def play_step(carry):
         grid, key, score, alive = carry
         key, subkey = jax.random.split(key)
         tiles = generate_tiles(subkey, grid)
 
-        moves = func(grid, tiles)
-        _, perm, a1, a2, a3 = moves
+        def do_step(_):
+            moves = func(grid, tiles)
+            _, perm, a1, a2, a3 = moves
+            tiles_ordered = jnp.take(tiles, perm, axis=0)
+            actions = jnp.array([a1, a2, a3])
 
-        tiles_ordered = jnp.take(tiles, perm, axis=0)
-        actions = jnp.array([a1, a2, a3])
+            def apply_move(carry, x):
+                grid, score, alive = carry
+                tile, action = x
+                new_grid, valid, reward = step(grid, tile, action)
+                score = score + reward * valid
+                alive = alive & valid
+                grid = jnp.where(valid, new_grid, grid)
+                return (grid, score, alive), None
 
-        def apply_move(carry, x):
-            grid, score, alive = carry
-            tile, action = x
+            return lax.scan(
+                apply_move,
+                (grid, score, alive),
+                (tiles_ordered, actions)
+            )[0]
 
-            new_grid, valid, reward = step(grid, tile, action)
+        def skip_step(_):
+            return grid, score, alive
 
-            score = score + reward * valid
-            alive = alive & valid
-
-            grid = jnp.where(valid, new_grid, grid)
-
-            return (grid, score, alive), None
-
-        (grid, score, alive), _ = lax.scan(
-            apply_move,
-            (grid, score, alive),
-            (tiles_ordered, actions)
+        grid, score, alive = jax.lax.cond(
+            alive,
+            do_step,
+            skip_step,
+            operand=None
         )
-
-        return (grid, key, score, alive), None
+        return (grid, key, score, alive)
 
     def run_one(key):
-        grid = jnp.zeros((9, 9), dtype=int)
-        score = 0
-        alive = True
+        grid = jnp.zeros((9, 9), dtype=jnp.int32)
+        score = jnp.float32(0)
+        alive = jnp.bool_(True)
 
-        (grid, key, score, alive), _ = lax.scan(
-            play_step,
-            (grid, key, score, alive),
-            None,
-            length=MAX_STEPS
+        def cond_fn(carry):
+            _, _, _, alive = carry
+            return alive
+
+        def body_fn(carry):
+            return play_step(carry)
+
+        grid, key, score, alive = lax.while_loop(
+            cond_fn,
+            body_fn,
+            (grid, key, score, alive)
         )
 
         return score
 
-    keys = jax.random.split(key, 100)
+    keys = jax.random.split(key, num_games)
     scores = jax.vmap(run_one)(keys)
-
     return scores
 
 @jax.jit
