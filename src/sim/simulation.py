@@ -6,7 +6,7 @@ from src.env.tiles import TILES
 from src.env.actions import step, has_valid_placements
 
 @partial(jax.jit, static_argnames=["func", "num_games"])
-def simulate_games(num_games, key, func):
+def simulate_games(key, num_games, func):
     def play_step(carry):
         grid, key, score, alive = carry
         key, subkey = jax.random.split(key)
@@ -36,7 +36,7 @@ def simulate_games(num_games, key, func):
         def skip_step(_):
             return grid, score, alive
 
-        grid, score, alive = jax.lax.cond(
+        grid, score, alive = lax.cond(
             alive,
             do_step,
             skip_step,
@@ -68,7 +68,6 @@ def simulate_games(num_games, key, func):
     scores = jax.vmap(run_one)(keys)
     return scores
 
-@jax.jit
 def generate_tiles(key, field):
 
     key, subkey = jax.random.split(key)
@@ -98,7 +97,6 @@ def generate_tiles(key, field):
         return tiles
 
     def fallback(_):
-        # IMPORTANT: same shape as success case
         key2, k1, k2 = jax.random.split(key, 3)
         r1 = jax.random.randint(k1, (), 0, len(TILES))
         r2 = jax.random.randint(k2, (), 0, len(TILES))
@@ -106,7 +104,7 @@ def generate_tiles(key, field):
 
         return jnp.stack([TILES[r1], TILES[r2], TILES[r3]])
 
-    return jax.lax.cond(
+    return lax.cond(
         has_any,
         pick,
         fallback,

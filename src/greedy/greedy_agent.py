@@ -11,8 +11,6 @@ import jax.numpy as jnp
 
 BIG = 1000.0
 
-
-@partial(jax.jit, static_argnames=["score_fn"])
 def greedy_with_order(grid, tiles, score_fn):
 
     actions = jnp.arange(GRID_SIZE * GRID_SIZE)
