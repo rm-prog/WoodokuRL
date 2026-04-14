@@ -1,7 +1,6 @@
 import jax.numpy as jnp
 import jax
 
-@jax.jit
 def shift(tile, row, col):
     out = jnp.zeros((9, 9), dtype=tile.dtype)
 

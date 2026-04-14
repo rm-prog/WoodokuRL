@@ -3,7 +3,6 @@ import jax.numpy as jnp
 from src.util.shifts import shift
 from src.config import GRID_SIZE, BOX_SIZE, BOX_AMOUNT
 
-@jax.jit
 def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
     shifted = shift(tile, row, col)
         
@@ -78,7 +77,6 @@ def has_valid_placements(grid, tile):
 
     return has_any, valid_actions
 
-@jax.jit
 def clear_lines(field: jnp.array):
 
     row_full = jnp.all(field != 0, axis=1).astype(bool)
