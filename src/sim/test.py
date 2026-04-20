@@ -10,20 +10,16 @@ from src.greedy.score_func import zero_score, empty_lines_score
 greedy_zero_fn = partial(greedy_with_order, score_fn=zero_score)
 greedy_empty_lines_fn = partial(greedy_with_order, score_fn=empty_lines_score)
 
-key = jax.random.key(0)
-key1 = jax.random.key(1)
+key = jax.random.key(4)
+key1 = jax.random.key(0)
 key2 = jax.random.key(2)
 key3 = jax.random.key(3)
-key4 = jax.random.key(4)
+key4 = jax.random.key(1)
 
-greedy_zero_20_games = partial(simulate_games, num_games=20, func=greedy_zero_fn)
+greedy_5_games = partial(simulate_games, num_games=5, func=greedy_empty_lines_fn)
 
-scores1 = greedy_zero_20_games(key).block_until_ready()
-start = time.perf_counter()
-scores2 = greedy_zero_20_games(key1).block_until_ready()
-end = time.perf_counter()
-
-print("Time for 20 games:", end - start)
-print(scores1)
-print(scores2)
-print(jnp.mean(scores1+scores2))
+for k in [key]:
+    start = time.perf_counter()
+    s = greedy_5_games(k).block_until_ready()
+    print(f"Time: {time.perf_counter() - start:.2f}s")
+    print(s)
