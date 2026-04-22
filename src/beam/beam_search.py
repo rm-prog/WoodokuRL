@@ -6,8 +6,6 @@ from src.config import GRID_SIZE
 from src.env.tiles import TILE_PERMS
 from src.env.actions import step
 
-BIG = 1000.0
-
 def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
 
     actions = jnp.arange(GRID_SIZE * GRID_SIZE)

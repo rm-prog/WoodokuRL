@@ -1,15 +1,11 @@
 import jax
 import jax.numpy as jnp
-from functools import partial
-from src.env.tiles import TILES, TILE_PERMS
+from src.env.tiles import TILE_PERMS
 from src.config import GRID_SIZE
 from src.env.actions import step
 
-from functools import partial
 import jax
 import jax.numpy as jnp
-
-BIG = 1000.0
 
 def greedy_with_order(grid, tiles, score_fn):
 
@@ -35,9 +31,9 @@ def greedy_with_order(grid, tiles, score_fn):
                     s2 = r1 + r2 + score_fn(g2)
                     s3 = r1 + r2 + r3 + score_fn(g3)
 
-                    p1 = jnp.where(v1, 1 * BIG + s1, -jnp.inf)
-                    p2 = jnp.where(v12, 2 * BIG + s2, -jnp.inf)
-                    p3 = jnp.where(v123, 3 * BIG + s3, -jnp.inf)
+                    p1 = jnp.where(v1, s1, -jnp.inf)
+                    p2 = jnp.where(v12, s2, -jnp.inf)
+                    p3 = jnp.where(v123, s3, -jnp.inf)
 
                     best = jnp.maximum(jnp.maximum(p1, p2), p3)
 
