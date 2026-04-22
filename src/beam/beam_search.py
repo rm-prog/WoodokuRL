@@ -20,7 +20,7 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
             g1, v1, r1 = step(grid, t1, a1)
 
             s1 = r1 + score_fn(g1)
-            score = jnp.where(v1, 1 * BIG + s1, -jnp.inf)
+            score = jnp.where(v1, s1, -jnp.inf)
 
             return score, g1, r1, v1
 
@@ -40,7 +40,7 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
                 v12 = v1 & v2
                 s2 = r1 + r2 + score_fn(g2)
 
-                score = jnp.where(v12, 2 * BIG + s2, -jnp.inf)
+                score = jnp.where(v12, s2, -jnp.inf)
 
                 return score, g2, r1 + r2, v12
 
@@ -73,7 +73,7 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
                 v123 = v2 & v3
                 s3 = r2 + r3 + score_fn(g3)
 
-                score = jnp.where(v123, 3 * BIG + s3, -jnp.inf)
+                score = jnp.where(v123, s3, -jnp.inf)
 
                 return score, a3
 
