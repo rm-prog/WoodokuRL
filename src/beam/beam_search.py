@@ -4,9 +4,9 @@ from jax import lax
 
 from src.config import GRID_SIZE
 from src.env.tiles import TILE_PERMS
-from src.env.actions import step
+from src.env.actions import step, has_valid_placements
 
-def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
+def beam_search_with_order(grid, tiles, score_fn, beam_width_step1=81, beam_width_step2=10):
 
     actions = jnp.arange(GRID_SIZE * GRID_SIZE)
 
@@ -17,14 +17,15 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
         def place1(a1):
             g1, v1, r1 = step(grid, t1, a1)
 
+            survives, _ = has_valid_placements(g1, t2)
             s1 = r1 + score_fn(g1)
-            score = jnp.where(v1, s1, -jnp.inf)
+            score = jnp.where(v1 & survives, s1, -jnp.inf)
 
             return score, g1, r1, v1
 
         scores1, grids1, rewards1, valids1 = jax.vmap(place1)(actions)
 
-        _, top1_idx = lax.top_k(scores1, beam_width)
+        _, top1_idx = lax.top_k(scores1, beam_width_step1)
 
         beam_grids1   = grids1[top1_idx]
         beam_rewards1 = rewards1[top1_idx]
@@ -35,7 +36,8 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
             def place2(a2):
                 g2, v2, r2 = step(g1, t2, a2)
 
-                v12 = v1 & v2
+                survives, _ = has_valid_placements(g2, t3)
+                v12 = v1 & v2 & survives
                 s2 = r1 + r2 + score_fn(g2)
 
                 score = jnp.where(v12, s2, -jnp.inf)
@@ -48,13 +50,13 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width=10):
             beam_grids1, beam_rewards1, beam_valids1
         )
 
-        K = beam_width
+        K = beam_width_step2
         scores2_flat  = scores2.reshape(-1)
         grids2_flat   = grids2.reshape(-1, GRID_SIZE, GRID_SIZE)
         rewards2_flat = rewards2.reshape(-1)
         valids2_flat  = valids2.reshape(-1)
 
-        _, top2_idx = lax.top_k(scores2_flat, beam_width)
+        _, top2_idx = lax.top_k(scores2_flat, beam_width_step2)
 
         beam_grids2   = grids2_flat[top2_idx]
         beam_rewards2 = rewards2_flat[top2_idx]
