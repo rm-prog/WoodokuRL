@@ -5,20 +5,39 @@ from src.mcts.tree import (
     init_tree,
     update_node,
     add_child,
+    init_root
 )
+from src.mcts.selection import select
+from src.mcts.expansion import expand
+from src.mcts.rollout import rollout
+from src.mcts.backprop import backprop
+from src.greedy.score_func import empty_lines_score
 
 from src.env.actions import step
 
-def run_mcts(grid: jnp.array, num_iters=50):
+def run_mcts(grid: jnp.array, root_tiles, num_iters=50):
     tree = init_tree()
+    tree = init_root(tree, grid)
     root = 0
 
-    tree = add_child(tree, -1, -1, root)
-    tree = update_node(tree, root, 0.0)
+    key = jax.random.key(0)
+    keys = jax.random.split(key, num_iters)
 
-    for _ in range(num_iters):
-        tree = mcts_iteration(tree, root, grid)
+    for i in range(num_iters):
+        tree = mcts_iteration(tree, root, root_tiles, keys[i])
 
-def mcts_iteration(tree, root, grid):
+@jax.jit
+def mcts_iteration(tree, root, root_tiles, key):
+    
     node = select(tree, root)
+
+    tiles = None
+    if tiles == root: tiles = root_tiles
+    tree, child, child_grid = expand(tree, node, tiles, key, empty_lines_score)
+
+    value = rollout(child_grid, key)
+
+    tree = backprop(tree, child, value)
+
+    return tree
     

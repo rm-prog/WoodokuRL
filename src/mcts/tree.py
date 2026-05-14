@@ -15,7 +15,6 @@ def init_tree():
         "parent": -jnp.ones((MAX_NODES,), dtype=jnp.int32),
         "children": -jnp.ones((MAX_NODES, MAX_CHILDREN), dtype=jnp.int32),
         "action_from_parent": -jnp.ones((MAX_NODES,), dtype=jnp.int32),
-        "terminal": jnp.zeros((MAX_NODES,), dtype=bool),
         "next_free": jnp.array(1, dtype=jnp.int32),
     }
 
@@ -65,6 +64,6 @@ def update_node(tree, node_id, value):
 
     return tree
 
-def init_root(tree):
-    tree = add_child(tree, parent=-1, action=-1, child_id=0)
+def init_root(tree, grid):
+    tree["grid"] = tree["grid"].at[0].set(grid)
     return tree
