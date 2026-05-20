@@ -13,7 +13,7 @@ def make_dummy_tiles():
     return jnp.ones((3, 2, 2), dtype=jnp.int32)
 
 def test_expand_creates_child():
-    key = jax.random.key(0)
+    key = jax.random.key(1)
 
     tree = init_tree()
     grid = make_dummy_grid()
@@ -27,7 +27,6 @@ def test_expand_creates_child():
         node=0,
         tiles=tiles,
         key=key,
-        score_fn=empty_lines_score,
     )
 
     assert child_id != 0

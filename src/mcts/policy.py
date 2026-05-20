@@ -20,31 +20,34 @@ def random_policy(grid, tiles, key):
 
     def sample_one(g, tile, key):
 
-        valid, _ = has_valid_placements(g, tile)
-        valid_idx = jnp.where(valid)[0]
+        has_any, valid_actions = has_valid_placements(g, tile)
 
         def no_valid(_):
             return 0, key, False
 
-        def has_valid(_):
-            key, subkey = jax.random.split(key)
+        def has_valid_branch(_):
 
-            idx = jax.random.randint(
-                subkey,
-                (),
-                0,
-                valid_idx.shape[0],
-            )
+            new_key, subkey = jax.random.split(key)
 
-            return valid_idx[idx], key, True
+            # shuffle full action space
+            perm = jax.random.permutation(subkey, 81)
+
+            shuffled = valid_actions[perm]
+
+            # find first valid action (not -1)
+            idx = jnp.argmax(shuffled != -1)
+
+            action = shuffled[idx]
+
+            return action, new_key, True
 
         return lax.cond(
-            jnp.any(valid),
-            has_valid,
+            has_any,
+            has_valid_branch,
             no_valid,
             operand=None
         )
-
+    
     key1, key2, key3, perm_key = jax.random.split(key, 4)
 
     perm = jax.random.permutation(perm_key, 3)

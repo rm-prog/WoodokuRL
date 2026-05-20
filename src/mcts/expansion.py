@@ -1,9 +1,10 @@
 import jax
 import jax.numpy as jnp
+from jax import lax
 
-from src.beam.beam_search import beam_search_with_order
 from src.sim.simulation import generate_tiles
 from src.env.actions import step
+from src.mcts.policy import random_policy
 
 
 def apply_sequence(grid, tiles, perm, a1, a2, a3):
@@ -19,56 +20,63 @@ def apply_sequence(grid, tiles, perm, a1, a2, a3):
     return g
 
 
-def expand(tree, node, tiles, key, score_fn):
+def expand(tree, node, tiles, key):
 
     grid = tree["grid"][node]
 
     if tiles is None:
-        tiles = generate_tiles(key, grid)
+        key, subkey = jax.random.split(key)
+        tiles = generate_tiles(subkey, grid)
 
-    _, perm, a1, a2, a3 = beam_search_with_order(
+    perm, a1, a2, a3, key, valid = random_policy(
         grid,
         tiles,
-        score_fn,
-        beam_width_step1=5,
-        beam_width_step2=5
+        key,
     )
 
-    child_grid = apply_sequence(
-        grid,
-        tiles,
-        perm,
-        a1,
-        a2,
-        a3,
+    def invalid_branch(_):
+        return tree, -1, grid
+    
+    def valid_branch(_):
+
+        child_grid = apply_sequence(
+            grid,
+            tiles,
+            perm,
+            a1,
+            a2,
+            a3,
+        )
+
+        child_id = tree["next_free"]
+
+        new_tree = tree.copy()
+
+        new_tree["grid"] = (
+            new_tree["grid"]
+            .at[child_id]
+            .set(child_grid)
+        )
+
+        children = new_tree["children"][node]
+
+        slot = jnp.argmax(children == -1)
+
+        new_tree["children"] = (
+            new_tree["children"]
+            .at[node, slot]
+            .set(child_id)
+        )
+
+        new_tree["parent"] = new_tree["parent"].at[child_id].set(node)
+
+        new_tree["next_free"] = new_tree["next_free"] + 1
+
+        return new_tree, child_id, child_grid
+
+    return lax.cond(
+        valid,
+        valid_branch,
+        invalid_branch,
+        operand=None
     )
-
-    child_id = tree["next_free"]
-
-    tree = tree.copy()
-
-    tree["grid"] = (
-        tree["grid"]
-        .at[child_id]
-        .set(child_grid)
-    )
-
-    children = tree["children"][node]
-
-    slot = jnp.argmax(children == -1)
-
-    tree["children"] = (
-        tree["children"]
-        .at[node, slot]
-        .set(child_id)
-    )
-
-    tree["parent"] = (
-        tree["parent"]
-        .at[child_id]
-        .set(node)
-    )
-
-    tree["next_free"] = tree["next_free"] + 1
-
-    return tree, child_id, child_grid
