@@ -8,13 +8,21 @@ from src.greedy.score_func import empty_lines_score
 
 def greedy_policy(grid, tiles, score_fn=empty_lines_score, beam_width_step1=5, beam_width_step2=5):
 
-    return beam_search_with_order(
+    score, perm, a1, a2, a3 = beam_search_with_order(
         grid,
         tiles,
         score_fn,
         beam_width_step1,
         beam_width_step2
     )
+
+    g, v1, _ = step(grid, tiles[perm[0]], a1)
+    g, v2, _ = step(g, tiles[perm[1]], a2)
+    g, v3, _ = step(g, tiles[perm[2]], a3)
+
+    valid = v1 & v2 & v3
+
+    return perm, a1, a2, a3, valid
 
 def random_policy(grid, tiles, key):
 
@@ -74,7 +82,8 @@ def hybrid_policy(grid, tiles, key, score_fn=empty_lines_score, eps=0.1):
     use_random = jax.random.uniform(subkey) < eps
 
     def use_greedy(_):
-        return greedy_policy(grid, tiles, score_fn)
+        perm, a1, a2, a3, valid = greedy_policy(grid, tiles, score_fn)
+        return perm, a1, a2, a3, key, valid
 
     def use_random_branch(_):
         return random_policy(grid, tiles, key)

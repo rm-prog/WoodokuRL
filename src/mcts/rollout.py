@@ -7,7 +7,7 @@ from src.sim.simulation import generate_tiles
 from src.mcts.policy import hybrid_policy
 
 
-def rollout(grid, key, depth=5, eps=0.2):
+def rollout(grid, key, depth=10, eps=0.2):
 
     def body(carry, _):
         grid, key, total_reward = carry
@@ -25,9 +25,9 @@ def rollout(grid, key, depth=5, eps=0.2):
         ordered = jnp.take(tiles, perm, axis=0)
 
         def valid_path(_):
-            g1, r1, _ = step(grid, ordered[0], a1)
-            g2, r2, _ = step(g1, ordered[1], a2)
-            g3, r3, _ = step(g2, ordered[2], a3)
+            g1, _, r1 = step(grid, ordered[0], a1)
+            g2, _, r2 = step(g1, ordered[1], a2)
+            g3, _, r3 = step(g2, ordered[2], a3)
 
             reward = r1 + r2 + r3
             return (g3, key, total_reward + reward)
