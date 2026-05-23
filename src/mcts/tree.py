@@ -1,69 +1,89 @@
 import jax
 import jax.numpy as jnp
-from src.config import GRID_SIZE
 
-MAX_NODES = 5000
-MAX_CHILDREN = 128
-NUM_ACTIONS = GRID_SIZE * GRID_SIZE
+from src.mcts.policy import random_policy
+from src.beam.beam_search import beam_search_topk
+from src.greedy.score_func import empty_lines_score
+from src.env.actions import step
 
-def init_tree():
+MAX_CANDIDATES = 1024
+BEAM_K = 10
 
-    tree = {
-        "grid": jnp.zeros((MAX_NODES, GRID_SIZE, GRID_SIZE), dtype=jnp.int32),
-        "visits": jnp.zeros((MAX_NODES,), dtype=jnp.int32),
-        "value_sum": jnp.zeros((MAX_NODES,), dtype=jnp.float32),
-        "parent": -jnp.ones((MAX_NODES,), dtype=jnp.int32),
-        "children": -jnp.ones((MAX_NODES, MAX_CHILDREN), dtype=jnp.int32),
-        "action_from_parent": -jnp.ones((MAX_NODES,), dtype=jnp.int32),
-        "next_free": jnp.array(1, dtype=jnp.int32),
+def init_candidates(grid, root_tiles, key):
+
+    beam = beam_search_topk(
+        grid,
+        root_tiles,
+        score_fn=empty_lines_score,
+        K=BEAM_K
+    )
+
+    beam_scores, beam_perm, beam_a1, beam_a2, beam_a3 = beam
+
+    beam_grids = jax.vmap(
+        lambda p, a1, a2, a3: apply_sequence(grid, root_tiles, p, a1, a2, a3)
+    )(beam_perm, beam_a1, beam_a2, beam_a3)
+
+    rand_keys = jax.random.split(key, MAX_CANDIDATES - BEAM_K)
+
+    def make_random(subkey):
+        perm, a1, a2, a3, _, valid = random_policy(
+            grid,
+            root_tiles,
+            subkey,
+        )
+
+        child_grid = apply_sequence(
+            grid,
+            root_tiles,
+            perm,
+            a1,
+            a2,
+            a3,
+        )
+
+        return child_grid, perm, a1, a2, a3, valid
+
+    rand_grids, rand_perm, rand_a1, rand_a2, rand_a3, rand_valid = jax.vmap(make_random)(rand_keys)
+
+    grids = jnp.concatenate([beam_grids, rand_grids], axis=0)
+    perms = jnp.concatenate([beam_perm, rand_perm], axis=0)
+    a1s   = jnp.concatenate([beam_a1, rand_a1], axis=0)
+    a2s   = jnp.concatenate([beam_a2, rand_a2], axis=0)
+    a3s   = jnp.concatenate([beam_a3, rand_a3], axis=0)
+
+    valids = jnp.concatenate([
+        jnp.ones((BEAM_K,), dtype=bool),
+        rand_valid
+    ])
+
+    return {
+        "grid": grids,
+        "perm": perms,
+        "a1": a1s,
+        "a2": a2s,
+        "a3": a3s,
+        "valid": valids,
+        "visits": jnp.zeros((MAX_CANDIDATES,), dtype=jnp.int32),
+        "value_sum": jnp.zeros((MAX_CANDIDATES,), dtype=jnp.float32),
     }
 
+def q_value(tree, i):
+    return tree["value_sum"][i] / (tree["visits"][i] + 1e-8)
+
+def update(tree, idx, value):
+    tree["visits"] = tree["visits"].at[idx].add(1)
+    tree["value_sum"] = tree["value_sum"].at[idx].add(value)
     return tree
 
-def q_value(tree, node_id):
-    """Mean value of node."""
-    return tree["value_sum"][node_id] / (tree["visits"][node_id] + 1e-8)
+def apply_sequence(grid, tiles, perm, a1, a2, a3):
 
+    ordered = jnp.take(tiles, perm, axis=0)
 
-def is_expanded(tree, node_id):
-    """Check if node has any children."""
-    return jnp.any(tree["children"][node_id] != -1)
+    g = grid
 
+    g, _, _ = step(g, ordered[0], a1)
+    g, _, _ = step(g, ordered[1], a2)
+    g, _, _ = step(g, ordered[2], a3)
 
-def get_children(tree, node_id):
-    return tree["children"][node_id]
-
-
-def get_parent(tree, node_id):
-    return tree["parent"][node_id]
-
-def add_child(tree, parent, action, child_id):
-
-    children = tree["children"].at[parent, action].set(child_id)
-    parent_arr = tree["parent"].at[child_id].set(parent)
-    action_arr = tree["action_from_parent"].at[child_id].set(action)
-
-    tree = tree.copy()
-    tree["children"] = children
-    tree["parent"] = parent_arr
-    tree["action_from_parent"] = action_arr
-
-    return tree
-
-def update_node(tree, node_id, value):
-    """
-    Adds one simulation result to a node.
-    """
-
-    visits = tree["visits"].at[node_id].add(1)
-    value_sum = tree["value_sum"].at[node_id].add(value)
-
-    tree = tree.copy()
-    tree["visits"] = visits
-    tree["value_sum"] = value_sum
-
-    return tree
-
-def init_root(tree, grid):
-    tree["grid"] = tree["grid"].at[0].set(grid)
-    return tree
+    return g

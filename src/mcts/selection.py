@@ -1,62 +1,32 @@
 import jax
 import jax.numpy as jnp
-from jax import lax
 
-def ucb_score(tree, parent, child, c=1.4):
+def ucb_score(tree, idx, c=1.4):
 
-    q = (
-        tree["value_sum"][child]
-        / (tree["visits"][child] + 1e-8)
-    )
+    q = tree["value_sum"][idx] / (tree["visits"][idx] + 1e-8)
+
+    total_visits = jnp.sum(tree["visits"])
 
     u = c * jnp.sqrt(
-        jnp.log1p(tree["visits"][parent])
-        / (tree["visits"][child] + 1e-8)
+        jnp.log(total_visits + 1)
+        / (tree["visits"][idx] + 1e-8)
     )
 
     return q + u
 
-def select(tree, root):
 
-    def cond_fn(node):
+def select(tree):
 
-        children = tree["children"][node]
-        valid = children != -1
+    idxs = jnp.arange(tree["visits"].shape[0])
 
-        return jnp.any(valid)
+    scores = jax.vmap(
+        lambda i: ucb_score(tree, i)
+    )(idxs)
 
-    def body_fn(node):
-
-        children = tree["children"][node]
-
-        valid = children != -1
-
-        valid_children = jnp.where(
-            valid,
-            children,
-            0
-        )
-
-        scores = jax.vmap(
-            lambda child: ucb_score(tree, node, child)
-        )(valid_children)
-
-        scores = jnp.where(
-            valid,
-            scores,
-            -jnp.inf
-        )
-
-        best_idx = jnp.argmax(scores)
-
-        next_node = children[best_idx]
-
-        return next_node
-
-    leaf = lax.while_loop(
-        cond_fn,
-        body_fn,
-        root
+    scores = jnp.where(
+        tree["valid"],
+        scores,
+        -jnp.inf
     )
 
-    return leaf
+    return jnp.argmax(scores)

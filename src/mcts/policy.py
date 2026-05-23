@@ -37,12 +37,10 @@ def random_policy(grid, tiles, key):
 
             new_key, subkey = jax.random.split(key)
 
-            # shuffle full action space
             perm = jax.random.permutation(subkey, 81)
 
             shuffled = valid_actions[perm]
 
-            # find first valid action (not -1)
             idx = jnp.argmax(shuffled != -1)
 
             action = shuffled[idx]

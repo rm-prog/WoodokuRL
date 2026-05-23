@@ -1,51 +1,34 @@
 import jax
 import jax.numpy as jnp
-from jax import lax
 
 from src.mcts.tree import (
-    init_tree,
-    update_node,
-    add_child,
-    init_root
+    init_candidates,
+    update
 )
 from src.mcts.selection import select
-from src.mcts.expansion import expand
 from src.mcts.rollout import rollout
-from src.mcts.backprop import backprop
-from src.greedy.score_func import empty_lines_score
-from src.sim.simulation import generate_tiles
 
-from src.env.actions import step
+def run_mcts(grid: jnp.array, root_tiles, num_iters=1024):
 
-def run_mcts(grid: jnp.array, root_tiles, num_iters=50):
-    tree = init_tree()
-    tree = init_root(tree, grid)
-    root = 0
+    init_key = jax.random.key(42)
+    tree = init_candidates(grid, root_tiles, init_key)
 
     key = jax.random.key(0)
     keys = jax.random.split(key, num_iters)
 
     for i in range(num_iters):
-        tree = mcts_iteration(tree, root, root_tiles, keys[i])
+        tree = mcts_iteration(tree, keys[i])
 
     return tree
 
 @jax.jit
-def mcts_iteration(tree, root, root_tiles, key):
+def mcts_iteration(tree, key):
     
-    node = select(tree, root)
+    idx = select(tree)
 
-    tiles = lax.cond(
-        node == root,
-        lambda _: root_tiles,
-        lambda _: generate_tiles(key, tree["grid"][node]),
-        operand=None
-    )
-    tree, child, child_grid = expand(tree, node, tiles, key)
+    value = rollout(tree["grid"][idx], key)
 
-    value = rollout(child_grid, key)
-
-    tree = backprop(tree, child, value)
+    tree = update(tree, idx, value)
 
     return tree
     
