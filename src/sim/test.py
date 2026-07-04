@@ -10,18 +10,18 @@ from src.greedy.score_func import zero_score, empty_lines_score
 greedy_zero_fn = partial(greedy_with_order, score_fn=zero_score)
 greedy_empty_lines_fn = partial(greedy_with_order, score_fn=empty_lines_score)
 
-N = 5
+N = 1
 master_key = jax.random.key(0)
 keys = jax.random.split(master_key, N)
 
-greedy_5_games = partial(simulate_games, num_games=5, func=greedy_empty_lines_fn)
+greedy_1_games = partial(simulate_games, num_games=1, func=greedy_empty_lines_fn)
 
 sum_of_averages = 0
 total_time = 0
 
 for k in keys:
     start = time.perf_counter()
-    s = greedy_5_games(k).block_until_ready()
+    s = greedy_1_games(k).block_until_ready()
     elapsed = time.perf_counter() - start
     total_time = total_time + elapsed
     print(f"Time: {elapsed:.2f}s")
