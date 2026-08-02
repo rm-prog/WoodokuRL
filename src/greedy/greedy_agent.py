@@ -24,20 +24,13 @@ def greedy_with_order(grid, tiles, score_fn):
                 def step3(a3):
                     g3, v3, r3 = step(g2, t3, a3)
 
-                    v12 = v1 & v2
-                    v123 = v12 & v3
+                    v123 = v1 & v2 & v3
 
-                    s1 = r1 + score_fn(g1)
-                    s2 = r1 + r2 + score_fn(g2)
                     s3 = r1 + r2 + r3 + score_fn(g3)
 
-                    p1 = jnp.where(v1, s1, -jnp.inf)
-                    p2 = jnp.where(v12, s2, -jnp.inf)
-                    p3 = jnp.where(v123, s3, -jnp.inf)
+                    score = jnp.where(v123, s3, -jnp.inf)
 
-                    best = jnp.maximum(jnp.maximum(p1, p2), p3)
-
-                    return best, a3
+                    return score, a3
 
                 scores3, a3s = jax.vmap(step3)(actions)
                 idx3 = jnp.argmax(scores3)
