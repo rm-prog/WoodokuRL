@@ -18,7 +18,7 @@ def init_candidates(grid, root_tiles, key):
         K=BEAM_K
     )
 
-    beam_scores, beam_perm, beam_a1, beam_a2, beam_a3 = beam
+    beam_scores, beam_perm, beam_a1, beam_a2, beam_a3, beam_valids = beam
 
     beam_grids = jax.vmap(
         lambda p, a1, a2, a3: apply_sequence(grid, root_tiles, p, a1, a2, a3)
@@ -53,7 +53,7 @@ def init_candidates(grid, root_tiles, key):
     a3s   = jnp.concatenate([beam_a3, rand_a3], axis=0)
 
     valids = jnp.concatenate([
-        jnp.ones((BEAM_K,), dtype=bool),
+        beam_valids,
         rand_valid
     ])
 

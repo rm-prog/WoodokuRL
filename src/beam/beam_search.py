@@ -106,26 +106,40 @@ def beam_search_with_order(grid, tiles, score_fn, beam_width_step1=81, beam_widt
 
     return best
 
-def beam_search_topk(grid, tiles, score_fn, K=10,
-                     beam_width_step1=81,
-                     beam_width_step2=10):
+def beam_search_topk(
+    grid,
+    tiles,
+    score_fn,
+    K=10,
+    beam_width_step1=81,
+    beam_width_step2=10,
+):
 
     actions = jnp.arange(GRID_SIZE * GRID_SIZE)
 
     def solve_for_perm(perm):
+
         t = jnp.take(tiles, perm, axis=0)
         t1, t2, t3 = t
 
+        # ---------- step 1 ----------
+
         def place1(a1):
+
             g1, v1, r1 = step(grid, t1, a1)
+
             survives, _ = has_valid_placements(g1, t2)
 
-            score1 = r1 + score_fn(g1)
-            score = jnp.where(v1 & survives, score1, -jnp.inf)
+            score = jnp.where(
+                v1 & survives,
+                r1 + score_fn(g1),
+                -jnp.inf,
+            )
 
             return score, g1, r1, v1
 
         scores1, grids1, rewards1, valids1 = jax.vmap(place1)(actions)
+
         _, top1 = lax.top_k(scores1, beam_width_step1)
 
         beam_g1 = grids1[top1]
@@ -133,22 +147,32 @@ def beam_search_topk(grid, tiles, score_fn, K=10,
         beam_v1 = valids1[top1]
         beam_a1 = top1
 
+        # ---------- step 2 ----------
+
         def expand2(g1, r1, v1):
+
             def place2(a2):
+
                 g2, v2, r2 = step(g1, t2, a2)
+
                 survives, _ = has_valid_placements(g2, t3)
 
-                v12 = v1 & v2 & survives
-                score2 = r1 + r2 + score_fn(g2)
+                valid = v1 & v2 & survives
 
-                score = jnp.where(v12, score2, -jnp.inf)
+                score = jnp.where(
+                    valid,
+                    r1 + r2 + score_fn(g2),
+                    -jnp.inf,
+                )
 
-                return score, g2, r1 + r2, v12
+                return score, g2, r1 + r2, valid
 
             return jax.vmap(place2)(actions)
 
         scores2, grids2, rewards2, valids2 = jax.vmap(expand2)(
-            beam_g1, beam_r1, beam_v1
+            beam_g1,
+            beam_r1,
+            beam_v1,
         )
 
         scores2 = scores2.reshape(-1)
@@ -156,51 +180,91 @@ def beam_search_topk(grid, tiles, score_fn, K=10,
         rewards2 = rewards2.reshape(-1)
         valids2 = valids2.reshape(-1)
 
+        parent_idx = jnp.repeat(
+            jnp.arange(beam_width_step1),
+            GRID_SIZE * GRID_SIZE,
+        )
+
+        parent_a1 = beam_a1[parent_idx]
+        parent_a2 = jnp.tile(actions, beam_width_step1)
+
         _, top2 = lax.top_k(scores2, beam_width_step2)
 
         beam_g2 = grids2[top2]
         beam_r2 = rewards2[top2]
         beam_v2 = valids2[top2]
 
-        parent_a1 = jnp.repeat(beam_a1, GRID_SIZE * GRID_SIZE)
-        beam_a2 = top2 % (GRID_SIZE * GRID_SIZE)
+        beam_a1 = parent_a1[top2]
+        beam_a2 = parent_a2[top2]
+
+        # ---------- step 3 ----------
 
         def expand3(g2, r2, v2):
+
             def place3(a3):
+
                 g3, v3, r3 = step(g2, t3, a3)
 
-                v123 = v2 & v3
-                score3 = r2 + r3 + score_fn(g3)
+                valid = v2 & v3
 
-                score = jnp.where(v123, score3, -jnp.inf)
+                score = jnp.where(
+                    valid,
+                    r2 + r3 + score_fn(g3),
+                    -jnp.inf,
+                )
 
-                return score, a3
+                return score, a3, valid
 
             return jax.vmap(place3)(actions)
 
-        scores3, a3s = jax.vmap(expand3)(
-            beam_g2, beam_r2, beam_v2
+        scores3, a3s, valids3 = jax.vmap(expand3)(
+            beam_g2,
+            beam_r2,
+            beam_v2,
         )
 
         scores3 = scores3.reshape(-1)
         a3s = a3s.reshape(-1)
+        valids3 = valids3.reshape(-1)
 
-        return scores3, perm, parent_a1, beam_a2, a3s
+        # repeat parents so every a3 has its own (a1,a2)
+
+        final_a1 = jnp.repeat(beam_a1, GRID_SIZE * GRID_SIZE)
+        final_a2 = jnp.repeat(beam_a2, GRID_SIZE * GRID_SIZE)
+
+        final_perm = jnp.repeat(
+            perm[None, :],
+            scores3.shape[0],
+            axis=0,
+        )
+
+        return (
+            scores3,
+            final_perm,
+            final_a1,
+            final_a2,
+            a3s,
+            valids3,
+        )
 
     results = jax.vmap(solve_for_perm)(TILE_PERMS)
 
     scores = results[0].reshape(-1)
-    perms  = results[1].reshape(-1, 3)
-    a1s    = results[2].reshape(-1)
-    a2s    = results[3].reshape(-1)
-    a3s    = results[4].reshape(-1)
+    perms = results[1].reshape(-1, 3)
+    a1s = results[2].reshape(-1)
+    a2s = results[3].reshape(-1)
+    a3s = results[4].reshape(-1)
+    valids = results[5].reshape(-1)
 
-    topk_idx = jnp.argsort(scores)[-K:]
+    scores = jnp.where(valids, scores, -jnp.inf)
+
+    _, top_idx = lax.top_k(scores, K)
 
     return (
-        scores[topk_idx],
-        perms[topk_idx],
-        a1s[topk_idx],
-        a2s[topk_idx],
-        a3s[topk_idx],
+        scores[top_idx],
+        perms[top_idx],
+        a1s[top_idx],
+        a2s[top_idx],
+        a3s[top_idx],
+        valids[top_idx],
     )
