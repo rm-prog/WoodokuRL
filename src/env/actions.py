@@ -14,8 +14,9 @@ def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
     boundary_valid = (original_count == shifted_count)
         
     valid = overlap_valid & boundary_valid
-        
-    result = jnp.where(valid, new_grid, grid)
+
+    illegal_grid = jnp.full((81, 81), -1, dtype=jnp.int32)    
+    result = jnp.where(valid, new_grid, illegal_grid)
         
     return result, valid
 
@@ -63,12 +64,21 @@ v_is_valid = jax.vmap(
 def apply_move(grid, tile, row, col):
     result, _ = place_tile(grid, tile, row, col)
     return result
+
+def apply_move_valid(grid, tile, row, col):
+    result, valid = place_tile(grid, tile, row, col)
+    return result, valid
     
 def apply_move_flat(grid, tile, action):
     row = action // GRID_SIZE
     col = action % GRID_SIZE
     return apply_move(grid, tile, row, col)
     
+def apply_move_flat_valid(grid, tile, action):
+    row = action // GRID_SIZE
+    col = action % GRID_SIZE
+    return apply_move(grid, tile, row, col)
+
 def has_valid_placements(grid, tile):
     actions = jnp.arange(GRID_SIZE*GRID_SIZE)
     valids = v_is_valid(grid, tile, actions)

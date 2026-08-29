@@ -1,71 +1,169 @@
+import itertools
+
 import jax
 import jax.numpy as jnp
 
+from src.config import GRID_SIZE
+
+from src.env.actions import has_valid_placements, apply_move_flat_valid
+
 from src.mcts.policy import random_policy
-from src.beam.beam_search import beam_search_topk
-from src.greedy.score_func import empty_lines_score
 from src.env.actions import step
 
-MAX_CANDIDATES = 1024
-BEAM_K = 10
+NUM_TILES = 3
+NUM_ACTIONS = GRID_SIZE * GRID_SIZE
+NUM_PERMUTATIONS = 6
+NUM_PLACEMENT_TRIPLES = NUM_ACTIONS ** 3
 
-def init_candidates(grid, root_tiles, key):
+NUM_CANDIDATES = 3188646
 
-    beam = beam_search_topk(
+PERMUTATIONS = jnp.array(
+    list(itertools.permutations(range(NUM_TILES))),
+    dtype=jnp.int32
+)
+
+def valid_placements(grid, tile):
+    """
+    Generate all possible placements for one tile.
+
+    Returns:
+        placement_valid: (NUM_ACTIONS,)
+        grids:           (NUM_ACTIONS, GRID_SIZE, GRID_SIZE)
+    """
+
+    actions = jnp.arange(NUM_ACTIONS)
+
+    grids = jax.vmap(
+        apply_move_flat_valid,
+        in_axes=(None, None, 0)
+    )(grid, tile, actions)
+
+    _, placement_valid = has_valid_placements(
         grid,
-        root_tiles,
-        score_fn=empty_lines_score,
-        K=BEAM_K
+        tile
     )
 
-    beam_scores, beam_perm, beam_a1, beam_a2, beam_a3, beam_valids = beam
+    return placement_valid, grids
 
-    beam_grids = jax.vmap(
-        lambda p, a1, a2, a3: apply_sequence(grid, root_tiles, p, a1, a2, a3)
-    )(beam_perm, beam_a1, beam_a2, beam_a3)
 
-    rand_keys = jax.random.split(key, MAX_CANDIDATES - BEAM_K)
+def check_placement_triple(grid, tiles, placements):
+    """
+    Check all 6 permutations of one placement triple.
 
-    def make_random(subkey):
-        perm, a1, a2, a3, _, valid = random_policy(
+    Args:
+        grid:
+            (GRID_SIZE, GRID_SIZE)
+
+        tiles:
+            (3, ...)
+
+        placements:
+            (3,)
+
+    Returns:
+        canonical:
+            (6,)
+
+        permutation_grids:
+            (6, GRID_SIZE, GRID_SIZE)
+    """
+
+    def simulate(permutation):
+
+        current_grid = grid
+        sequence_valid = True
+
+        for i in range(NUM_TILES):
+
+            tile = tiles[permutation[i]]
+            placement = placements[i]
+
+            current_grid, placement_valid = apply_move_flat_valid(
+                current_grid,
+                tile,
+                placement
+            )
+
+            sequence_valid &= placement_valid
+
+        return sequence_valid, current_grid
+
+    permutation_valid, permutation_grids = jax.vmap(
+        simulate
+    )(PERMUTATIONS)
+
+    # ---------------------------------------------------------
+    # Compare final grids
+    # ---------------------------------------------------------
+
+    equal_grids = jax.vmap(
+        lambda g: jnp.all(
+            permutation_grids == g,
+            axis=(1, 2)
+        )
+    )(permutation_grids)
+
+    # equal_grids[i, j] = True if permutations i and j
+    # result in the same final grid.
+
+    # ---------------------------------------------------------
+    # Remove redundant permutations
+    # ---------------------------------------------------------
+
+    # Only look at permutations BEFORE the current one.
+    earlier_equal = jnp.tril(
+        equal_grids,
+        k=-1
+    )
+
+    duplicate = jnp.any(
+        earlier_equal,
+        axis=1
+    )
+
+    canonical = (
+        permutation_valid
+        & ~duplicate
+    )
+
+    return canonical
+
+def enumerate_placements():
+    indices = jnp.arange(NUM_PLACEMENT_TRIPLES)
+
+    p1 = indices // (NUM_ACTIONS ** 2)
+
+    remainder = indices % (NUM_ACTIONS ** 2)
+
+    p2 = remainder // NUM_ACTIONS
+
+    p3 = remainder % NUM_ACTIONS
+
+    return jnp.stack(
+        [p1, p2, p3],
+        axis=1
+    )
+
+@jax.jit
+def init_candidates(grid, tiles):
+
+    placements = enumerate_placements()
+
+    valid_by_placement = jax.vmap(
+        check_placement_triple,
+        in_axes=(None, None, 0)
+        )(
             grid,
-            root_tiles,
-            subkey,
+            tiles,
+            placements
         )
 
-        child_grid = apply_sequence(
-            grid,
-            root_tiles,
-            perm,
-            a1,
-            a2,
-            a3,
-        )
-
-        return child_grid, perm, a1, a2, a3, valid
-
-    rand_grids, rand_perm, rand_a1, rand_a2, rand_a3, rand_valid = jax.vmap(make_random)(rand_keys)
-
-    grids = jnp.concatenate([beam_grids, rand_grids], axis=0)
-    perms = jnp.concatenate([beam_perm, rand_perm], axis=0)
-    a1s   = jnp.concatenate([beam_a1, rand_a1], axis=0)
-    a2s   = jnp.concatenate([beam_a2, rand_a2], axis=0)
-    a3s   = jnp.concatenate([beam_a3, rand_a3], axis=0)
-
-    valids = jnp.concatenate([
-        beam_valids,
-        rand_valid
-    ])
+    valid = valid_by_placement.T.reshape(-1)
 
     return {
-        "grid": grids,
-        "perm": perms,
-        "a1": a1s,
-        "a2": a2s,
-        "a3": a3s,
-        "valid": valids,
-        "visits": jnp.zeros((MAX_CANDIDATES,), dtype=jnp.int32),
-        "value_sum": jnp.zeros((MAX_CANDIDATES,), dtype=jnp.float32),
+        "valid": valid,
+        "visits": jnp.zeros(NUM_CANDIDATES, dtype=jnp.int32),
+        "value_sum": jnp.zeros(NUM_CANDIDATES, dtype=jnp.float32),
     }
 
 def q_value(tree, i):
@@ -75,15 +173,3 @@ def update(tree, idx, value):
     tree["visits"] = tree["visits"].at[idx].add(1)
     tree["value_sum"] = tree["value_sum"].at[idx].add(value)
     return tree
-
-def apply_sequence(grid, tiles, perm, a1, a2, a3):
-
-    ordered = jnp.take(tiles, perm, axis=0)
-
-    g = grid
-
-    g, _, _ = step(g, ordered[0], a1)
-    g, _, _ = step(g, ordered[1], a2)
-    g, _, _ = step(g, ordered[2], a3)
-
-    return g
