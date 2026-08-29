@@ -1,27 +1,25 @@
 import jax
 import jax.numpy as jnp
 
-def ucb_score(tree, idx, c=1.4):
+def ucb_score(tree, c=1.4):
 
-    q = tree["value_sum"][idx] / (tree["visits"][idx] + 1e-8)
+    visits = tree["visits"]
+    value_sum = tree["value_sum"]
 
-    total_visits = jnp.sum(tree["visits"])
+    q = value_sum / (visits + 1e-8)
+
+    total_visits = jnp.sum(visits)
 
     u = c * jnp.sqrt(
         jnp.log(total_visits + 1)
-        / (tree["visits"][idx] + 1e-8)
+        / (visits + 1e-8)
     )
 
     return q + u
 
-
 def select(tree):
 
-    idxs = jnp.arange(tree["visits"].shape[0])
-
-    scores = jax.vmap(
-        lambda i: ucb_score(tree, i)
-    )(idxs)
+    scores = ucb_score(tree)
 
     scores = jnp.where(
         tree["valid"],
@@ -29,4 +27,14 @@ def select(tree):
         -jnp.inf
     )
 
-    return jnp.argmax(scores)
+    def no_valid_move():
+        return jnp.int32(-1)
+
+    def argmax_scores():
+        return jnp.argmax(scores)
+
+    return jax.lax.cond(
+        jnp.any(tree["valid"]),
+        argmax_scores,
+        no_valid_move
+    )

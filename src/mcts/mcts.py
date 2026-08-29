@@ -1,6 +1,8 @@
 import jax
 import jax.numpy as jnp
 
+from src.env.actions import apply_move_flat
+
 from src.mcts.tree import (
     init_candidates,
     update,
@@ -8,7 +10,13 @@ from src.mcts.tree import (
 from src.mcts.selection import select
 from src.mcts.rollout import rollout
 
-from src.config import MCTS_ITERS
+from src.config import (
+    MCTS_ITERS, 
+    NUM_TILES,
+    NUM_ACTIONS,
+    NUM_PLACEMENT_TRIPLES,
+    PERMUTATIONS
+    ) 
 
 def q_value(tree):
     return tree["value_sum"] / (tree["visits"] + 1e-8)
@@ -16,13 +24,12 @@ def q_value(tree):
 @jax.jit
 def run_mcts(grid, root_tiles):
 
-    init_key = jax.random.key(42) 
-    tree = init_candidates(grid, root_tiles, init_key)
+    tree = init_candidates(grid, root_tiles)
 
     keys = jax.random.split(jax.random.key(0), MCTS_ITERS)
 
     def body(tree, key):
-        tree = mcts_iteration(tree, key)
+        tree = mcts_iteration(tree, key, grid, root_tiles)
         return tree, None
 
     tree, _ = jax.lax.scan(body, tree, keys)
@@ -31,21 +38,92 @@ def run_mcts(grid, root_tiles):
 
     best_idx = jnp.argmax(q)
 
+    perm = best_idx // NUM_PLACEMENT_TRIPLES
+    remainder = best_idx % NUM_PLACEMENT_TRIPLES
+    p1 = remainder // (NUM_ACTIONS ** 2)
+    remainder = remainder % (NUM_ACTIONS ** 2)
+    p2 = remainder // NUM_ACTIONS
+    p3 = remainder % NUM_ACTIONS
+    placements = jnp.take(jnp.array([p1,p2,p3]), PERMUTATIONS[perm], axis=0)
+
+    current_grid = grid
+
+    for i in range(NUM_TILES):
+    
+        tile = root_tiles[PERMUTATIONS[perm][i]]
+        placement = placements[i]
+    
+        current_grid = apply_move_flat(
+            current_grid,
+            tile,
+            placement
+        )
+
     return (
-        tree["grid"][best_idx],
-        tree["perm"][best_idx],
-        tree["a1"][best_idx],
-        tree["a2"][best_idx],
-        tree["a3"][best_idx]
+        current_grid,
+        PERMUTATIONS[perm],
+        placements[0],
+        placements[1],
+        placements[2]
     )
 
-def mcts_iteration(tree, key):
-    
+def mcts_iteration(tree, key, grid, tiles):
+
     idx = select(tree)
 
-    value = rollout(tree["grid"][idx], key)
+    def no_valid_move():
+        return tree
 
-    tree = update(tree, idx, value)
+    def rollout_update():
 
-    return tree
-    
+        permutation_idx = idx // (NUM_ACTIONS ** 3)
+
+        placement_idx = idx % (NUM_ACTIONS ** 3)
+
+        p1 = placement_idx // (NUM_ACTIONS ** 2)
+
+        remainder = placement_idx % (NUM_ACTIONS ** 2)
+
+        p2 = remainder // NUM_ACTIONS
+
+        p3 = remainder % NUM_ACTIONS
+
+        permutation = PERMUTATIONS[permutation_idx]
+
+        [p1, p2, p3] = jnp.take(jnp.array([p1, p2, p3]), permutation, axis=0)
+
+        # Apply the three placements in the selected order
+        grid_1 = apply_move_flat(
+            grid,
+            tiles[permutation[0]],
+            p1
+        )
+
+        grid_2 = apply_move_flat(
+            grid_1,
+            tiles[permutation[1]],
+            p2
+        )
+
+        grid_3 = apply_move_flat(
+            grid_2,
+            tiles[permutation[2]],
+            p3
+        )
+
+        value = rollout(
+            grid_3,
+            key
+        )
+
+        return update(
+            tree,
+            idx,
+            value
+        )
+
+    return jax.lax.cond(
+        idx == -1,
+        no_valid_move,
+        rollout_update
+    )

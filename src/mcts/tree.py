@@ -5,17 +5,14 @@ import jax.numpy as jnp
 
 from src.config import GRID_SIZE
 
-from src.env.actions import has_valid_placements, apply_move_flat_valid
-
-from src.mcts.policy import random_policy
-from src.env.actions import step
+from src.env.actions import has_valid_placements, apply_move_flat_valid, apply_move_flat
 
 NUM_TILES = 3
 NUM_ACTIONS = GRID_SIZE * GRID_SIZE
 NUM_PERMUTATIONS = 6
 NUM_PLACEMENT_TRIPLES = NUM_ACTIONS ** 3
 
-NUM_CANDIDATES = 3188646
+NUM_CANDIDATES = NUM_PLACEMENT_TRIPLES * NUM_PERMUTATIONS
 
 PERMUTATIONS = jnp.array(
     list(itertools.permutations(range(NUM_TILES))),
@@ -34,7 +31,7 @@ def valid_placements(grid, tile):
     actions = jnp.arange(NUM_ACTIONS)
 
     grids = jax.vmap(
-        apply_move_flat_valid,
+        apply_move_flat,
         in_axes=(None, None, 0)
     )(grid, tile, actions)
 

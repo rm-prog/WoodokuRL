@@ -15,7 +15,7 @@ def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
         
     valid = overlap_valid & boundary_valid
 
-    illegal_grid = jnp.full((81, 81), -1, dtype=jnp.int32)    
+    illegal_grid = jnp.full((9, 9), -1, dtype=jnp.int32)    
     result = jnp.where(valid, new_grid, illegal_grid)
         
     return result, valid
@@ -77,7 +77,7 @@ def apply_move_flat(grid, tile, action):
 def apply_move_flat_valid(grid, tile, action):
     row = action // GRID_SIZE
     col = action % GRID_SIZE
-    return apply_move(grid, tile, row, col)
+    return apply_move_valid(grid, tile, row, col)
 
 def has_valid_placements(grid, tile):
     actions = jnp.arange(GRID_SIZE*GRID_SIZE)

@@ -1,4 +1,19 @@
+import itertools
+import jax.numpy as jnp
+
 GRID_SIZE = 9
 BOX_SIZE = 3
 BOX_AMOUNT = 3
-MCTS_ITERS = 2048
+MCTS_ITERS = 5_000_000
+
+NUM_TILES = 3
+NUM_ACTIONS = GRID_SIZE * GRID_SIZE
+NUM_PERMUTATIONS = 6
+NUM_PLACEMENT_TRIPLES = NUM_ACTIONS ** 3
+
+NUM_CANDIDATES = NUM_PLACEMENT_TRIPLES * NUM_PERMUTATIONS
+
+PERMUTATIONS = jnp.array(
+    list(itertools.permutations(range(NUM_TILES))),
+    dtype=jnp.int32
+)
