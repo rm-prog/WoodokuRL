@@ -5,7 +5,7 @@ import jax.numpy as jnp
 
 from src.config import GRID_SIZE
 
-from src.env.actions import has_valid_placements, apply_move_flat_valid, apply_move_flat
+from src.env.actions import has_valid_placements, apply_move_flat_valid, apply_move_flat, step
 
 NUM_TILES = 3
 NUM_ACTIONS = GRID_SIZE * GRID_SIZE
@@ -70,10 +70,12 @@ def check_placement_triple(grid, tiles, placements):
         current_grid = grid
         sequence_valid = True
 
+        permuted_placements = jnp.take(placements, permutation, axis=0)
+
         for i in range(NUM_TILES):
 
             tile = tiles[permutation[i]]
-            placement = placements[i]
+            placement = permuted_placements[i]
 
             current_grid, placement_valid = apply_move_flat_valid(
                 current_grid,

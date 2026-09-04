@@ -16,6 +16,7 @@ def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
     valid = overlap_valid & boundary_valid
 
     illegal_grid = jnp.full((9, 9), -1, dtype=jnp.int32)    
+    new_grid = clear_lines(new_grid)
     result = jnp.where(valid, new_grid, illegal_grid)
         
     return result, valid
