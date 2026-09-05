@@ -5,7 +5,8 @@ import jax.numpy as jnp
 
 from src.config import GRID_SIZE
 
-from src.env.actions import apply_move_flat_valid, clear_lines
+from src.env.actions import clear_lines
+from src.env.tiles import SHIFTED_TILES, SHIFTED_TILES_VALID
 
 NUM_TILES = 3
 NUM_ACTIONS = GRID_SIZE * GRID_SIZE
@@ -19,91 +20,6 @@ PERMUTATIONS = jnp.array(
     dtype=jnp.int32
 )
 
-
-@jax.jit
-def check_placement_triple(grid, tiles, placements):
-    """
-    Check all 6 permutations of one placement triple.
-
-    Args:
-        grid:
-            (GRID_SIZE, GRID_SIZE)
-
-        tiles:
-            (3, ...)
-
-        placements:
-            (3,)
-
-    Returns:
-        canonical:
-            (6,)
-
-        permutation_grids:
-            (6, GRID_SIZE, GRID_SIZE)
-    """
-
-    def simulate(permutation):
-
-        current_grid = grid
-        sequence_valid = True
-
-        permuted_placements = jnp.take(placements, permutation, axis=0)
-
-        for i in range(NUM_TILES):
-
-            tile = tiles[permutation[i]]
-            placement = permuted_placements[i]
-
-            current_grid, placement_valid = apply_move_flat_valid(
-                current_grid,
-                tile,
-                placement
-            )
-            current_grid = clear_lines(current_grid)   
-            sequence_valid &= placement_valid
-
-        return sequence_valid, current_grid
-
-    permutation_valid, permutation_grids = jax.vmap(
-        simulate
-    )(PERMUTATIONS)
-
-    # ---------------------------------------------------------
-    # Compare final grids
-    # ---------------------------------------------------------
-
-    equal_grids = jax.vmap(
-        lambda g: jnp.all(
-            permutation_grids == g,
-            axis=(1, 2)
-        )
-    )(permutation_grids)
-
-    # equal_grids[i, j] = True if permutations i and j
-    # result in the same final grid.
-
-    # ---------------------------------------------------------
-    # Remove redundant permutations
-    # ---------------------------------------------------------
-
-    # Only look at permutations BEFORE the current one.
-    earlier_equal = jnp.tril(
-        equal_grids,
-        k=-1
-    )
-
-    duplicate = jnp.any(
-        earlier_equal,
-        axis=1
-    )
-
-    canonical = (
-        permutation_valid
-        & ~duplicate
-    )
-
-    return canonical
 
 @jax.jit
 def enumerate_placements():
@@ -122,21 +38,46 @@ def enumerate_placements():
         axis=1
     )
 
+
+@jax.jit
+def valid_candidates_for_permutation(grid, tiles, permutation):
+    """Return valid flat candidates for one tile order."""
+    tile_1, tile_2, tile_3 = tiles[permutation]
+
+    shifted_1 = SHIFTED_TILES[tile_1]
+    shifted_2 = SHIFTED_TILES[tile_2]
+    shifted_3 = SHIFTED_TILES[tile_3]
+    shifted_1_flat = shifted_1.reshape(NUM_ACTIONS, GRID_SIZE, GRID_SIZE)
+    shifted_2_flat = shifted_2.reshape(NUM_ACTIONS, GRID_SIZE, GRID_SIZE)
+
+    valid_1 = (
+        (jnp.einsum("rcij,ij->rc", shifted_1, grid) == 0)
+        & SHIFTED_TILES_VALID[tile_1]
+    ).reshape(-1)
+    grids_1 = jax.vmap(clear_lines)(grid + shifted_1_flat)
+
+    grids_2 = (
+        grids_1[:, None, :, :] + shifted_2_flat[None, :, :, :]
+    ).reshape(NUM_PLACEMENT_TRIPLES // NUM_ACTIONS, GRID_SIZE, GRID_SIZE)
+    valid_2 = (
+        (jnp.einsum("rcij,nij->nrc", shifted_2, grids_1) == 0)
+        & SHIFTED_TILES_VALID[tile_2]
+    ).reshape(-1)
+    valid_2 = valid_2 & valid_1.repeat(NUM_ACTIONS)
+    grids_2 = jax.vmap(clear_lines)(grids_2)
+
+    valid_3 = (
+        (jnp.einsum("rcij,nij->nrc", shifted_3, grids_2) == 0)
+        & SHIFTED_TILES_VALID[tile_3]
+    ).reshape(-1)
+    return valid_3 & valid_2.repeat(NUM_ACTIONS)
+
 @jax.jit
 def init_candidates(grid, tiles):
-
-    placements = enumerate_placements()
-
-    valid_by_placement = jax.vmap(
-        check_placement_triple,
-        in_axes=(None, None, 0)
-        )(
-            grid,
-            tiles,
-            placements
-        )
-
-    valid = valid_by_placement.T.reshape(-1)
+    valid = jax.vmap(
+        valid_candidates_for_permutation,
+        in_axes=(None, None, 0),
+    )(grid, tiles, PERMUTATIONS).reshape(-1)
 
     return {
         "valid": valid,

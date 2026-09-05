@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from src.env.actions import apply_move_flat
+from src.env.actions import apply_move_flat, clear_lines
 
 from src.mcts.tree import (
     init_candidates,
@@ -36,7 +36,8 @@ def run_mcts(grid, root_tiles):
     tree, _ = jax.lax.scan(body, tree, keys)
 
     q = q_value(tree)
-
+    q = jnp.where(tree["valid"], q, -jnp.inf)
+    has_valid = jnp.any(tree["valid"])
     best_idx = jnp.argmax(q)
 
     perm = best_idx // NUM_PLACEMENT_TRIPLES
@@ -47,18 +48,21 @@ def run_mcts(grid, root_tiles):
     p3 = remainder % NUM_ACTIONS
     placements = jnp.take(jnp.array([p1,p2,p3]), PERMUTATIONS[perm], axis=0)
 
-    current_grid = grid
+    def apply_best_move(_):
+        current_grid = grid
+        for i in range(NUM_TILES):
+            tile = root_tiles[PERMUTATIONS[perm][i]]
+            placement = placements[i]
+            current_grid = apply_move_flat(current_grid, tile, placement)
+            current_grid = clear_lines(current_grid)
+        return current_grid
 
-    for i in range(NUM_TILES):
-    
-        tile = root_tiles[PERMUTATIONS[perm][i]]
-        placement = placements[i]
-    
-        current_grid = apply_move_flat(
-            current_grid,
-            tile,
-            placement
-        )
+    current_grid = jax.lax.cond(
+        has_valid,
+        apply_best_move,
+        lambda _: grid,
+        operand=None,
+    )
 
     return (
         current_grid,
