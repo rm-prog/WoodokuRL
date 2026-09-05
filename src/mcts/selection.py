@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from functools import partial
 
 @jax.jit
 def ucb_score(tree, c=1.4):
@@ -42,3 +43,25 @@ def select(tree):
         ),
         no_valid_move,
     )
+
+
+@partial(jax.jit, static_argnames=["batch_size"])
+def select_batch(tree, key, batch_size):
+    valid = tree["valid"]
+    unvisited = valid & (tree["visits"] == 0)
+
+    def unvisited_scores():
+        noise = jax.random.uniform(key, valid.shape)
+        return jnp.where(unvisited, noise, -jnp.inf)
+
+    def ucb_scores():
+        return jnp.where(valid, ucb_score(tree), -jnp.inf)
+
+    scores = jax.lax.cond(
+        jnp.any(unvisited),
+        unvisited_scores,
+        ucb_scores,
+    )
+    _, indices = jax.lax.top_k(scores, batch_size)
+    selected = jnp.isfinite(scores[indices])
+    return indices, selected
