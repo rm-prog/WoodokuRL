@@ -18,6 +18,7 @@ from src.config import (
     PERMUTATIONS
     ) 
 
+@jax.jit
 def q_value(tree):
     return tree["value_sum"] / (tree["visits"] + 1e-8)
 
@@ -67,6 +68,7 @@ def run_mcts(grid, root_tiles):
         placements[2]
     )
 
+@jax.jit
 def mcts_iteration(tree, key, grid, tiles):
 
     idx = select(tree)

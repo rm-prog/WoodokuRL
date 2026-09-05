@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 
+@jax.jit
 def ucb_score(tree, c=1.4):
 
     visits = tree["visits"]
@@ -17,6 +18,7 @@ def ucb_score(tree, c=1.4):
 
     return q + u
 
+@jax.jit
 def select(tree):
 
     scores = ucb_score(tree)

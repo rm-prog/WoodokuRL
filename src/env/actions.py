@@ -2,7 +2,9 @@ import jax
 import jax.numpy as jnp
 from src.util.shifts import shift
 from src.config import GRID_SIZE, BOX_SIZE, BOX_AMOUNT
+from src.env.tiles import SHIFTED_TILES, SHIFTED_TILES_VALID, TILES
 
+@jax.jit
 def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
     shifted = shift(tile, row, col)
         
@@ -21,6 +23,7 @@ def place_tile(grid: jnp.array, tile: jnp.array, row: int, col: int):
         
     return result, valid
 
+@jax.jit
 def step(grid, tile, action):
     row = action // GRID_SIZE
     col = action % GRID_SIZE
@@ -47,39 +50,46 @@ def step(grid, tile, action):
     cleared_grid = clear_lines(placed_grid)
 
     return cleared_grid, valid, reward
-    
+
+@jax.jit    
 def is_valid_placement(grid, tile, row, col):
     _, valid = place_tile(grid, tile, row, col)
     return valid
-    
+
+@jax.jit    
 def is_valid_placement_flat(grid, tile, action):
     row = action // GRID_SIZE
     col = action % GRID_SIZE
     return is_valid_placement(grid, tile, row, col)
 
-v_is_valid = jax.vmap(
+v_is_valid = jax.jit(jax.vmap(
     is_valid_placement_flat,
     in_axes=(None, None, 0)
-)
+))
 
+@jax.jit
 def apply_move(grid, tile, row, col):
     result, _ = place_tile(grid, tile, row, col)
     return result
 
+@jax.jit
 def apply_move_valid(grid, tile, row, col):
     result, valid = place_tile(grid, tile, row, col)
     return result, valid
-    
+
+@jax.jit    
 def apply_move_flat(grid, tile, action):
     row = action // GRID_SIZE
     col = action % GRID_SIZE
     return apply_move(grid, tile, row, col)
-    
+
+@jax.jit
 def apply_move_flat_valid(grid, tile, action):
     row = action // GRID_SIZE
     col = action % GRID_SIZE
     return apply_move_valid(grid, tile, row, col)
 
+@jax.jit
 def has_valid_placements(grid, tile):
     actions = jnp.arange(GRID_SIZE*GRID_SIZE)
     valids = v_is_valid(grid, tile, actions)
@@ -88,6 +98,7 @@ def has_valid_placements(grid, tile):
 
     return has_any, valid_actions
 
+@jax.jit
 def clear_lines(field: jnp.array):
 
     row_full = jnp.all(field != 0, axis=1).astype(bool)

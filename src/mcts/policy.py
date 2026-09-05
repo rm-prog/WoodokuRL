@@ -24,6 +24,7 @@ def greedy_policy(grid, tiles, score_fn=empty_lines_score, beam_width_step1=5, b
 
     return perm, a1, a2, a3, valid
 
+@jax.jit
 def random_policy(grid, tiles, key):
 
     def sample_one(g, tile, key):
@@ -74,7 +75,8 @@ def random_policy(grid, tiles, key):
 
     return perm, a1, a2, a3, key3, valid
 
-def hybrid_policy(grid, tiles, key, score_fn=empty_lines_score, eps=0.1):
+@jax.jit
+def hybrid_policy(grid, tiles, key, score_fn=empty_lines_score, eps=1.0):
 
     key, subkey = jax.random.split(key)
     use_random = jax.random.uniform(subkey) < eps

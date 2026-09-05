@@ -6,8 +6,8 @@ from src.env.actions import step
 from src.sim.simulation import generate_tiles
 from src.mcts.policy import hybrid_policy
 
-
-def rollout(grid, key, depth=10, eps=0.2):
+@jax.jit
+def rollout(grid, key, depth=10, eps=1.0):
 
     def body(carry, _):
         grid, key, total_reward = carry

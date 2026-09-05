@@ -1,13 +1,15 @@
 import jax
 import jax.numpy as jnp
 
-from src.mcts.mcts import run_mcts
+from src.mcts.mcts import run_mcts, mcts_iteration
 from src.mcts.tree import init_candidates
+from src.mcts.policy import random_policy
 from src.env.tiles import TILES
 from src.sim.simulation import simulate_games
 from src.config import NUM_PLACEMENT_TRIPLES, NUM_ACTIONS
 
 from functools import partial
+import time
 
 def make_dummy_grid():
     return jnp.zeros((9, 9), dtype=jnp.int32)
@@ -88,8 +90,33 @@ grid = jnp.array([
 
 test_identical_tiles(grid)
 
-result = run_mcts(make_dummy_grid(), jnp.stack([TILES[0], TILES[5], TILES[5]]))
+# tree = init_candidates(grid, jnp.stack([TILES[0], TILES[5], TILES[5]]))
+# tree = mcts_iteration(tree, jax.random.key(0), grid, jnp.stack([TILES[0], TILES[5], TILES[5]]))
+# jax.block_until_ready(tree)
+# start = time.perf_counter()
+# tree = mcts_iteration(tree, jax.random.key(0), grid, jnp.stack([TILES[0], TILES[5], TILES[5]]))
+# jax.block_until_ready(tree)
+# end = time.perf_counter()
+# print("Why is this so slow: ", end-start)
 
-mcts_one_game = partial(simulate_games, num_games=1, func=run_mcts)
-key = jax.random.key(0)
-print(mcts_one_game(key))
+# result = random_policy(grid, jnp.stack([TILES[0], TILES[5], TILES[5]]), jax.random.key(0))
+# jax.block_until_ready(result)
+# start = time.perf_counter()
+# result = random_policy(grid, jnp.stack([TILES[0], TILES[5], TILES[5]]), jax.random.key(0))
+# jax.block_until_ready(result)
+# end = time.perf_counter()
+# print("time for random policy: ", end-start)
+# print(result)
+
+result = run_mcts(make_dummy_grid(), jnp.stack([TILES[0], TILES[5], TILES[5]]))
+jax.block_until_ready(result)
+start = time.perf_counter()
+result = run_mcts(make_dummy_grid(), jnp.stack([TILES[0], TILES[5], TILES[5]]))
+jax.block_until_ready(result)
+print(result)
+end = time.perf_counter()
+print("time for one turn: ", end-start)
+
+# mcts_one_game = partial(simulate_games, num_games=1, func=run_mcts)
+# key = jax.random.key(0)
+# print(mcts_one_game(key))

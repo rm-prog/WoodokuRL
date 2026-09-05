@@ -19,6 +19,7 @@ PERMUTATIONS = jnp.array(
     dtype=jnp.int32
 )
 
+@jax.jit
 def valid_placements(grid, tile):
     """
     Generate all possible placements for one tile.
@@ -42,7 +43,7 @@ def valid_placements(grid, tile):
 
     return placement_valid, grids
 
-
+@jax.jit
 def check_placement_triple(grid, tiles, placements):
     """
     Check all 6 permutations of one placement triple.
@@ -127,6 +128,7 @@ def check_placement_triple(grid, tiles, placements):
 
     return canonical
 
+@jax.jit
 def enumerate_placements():
     indices = jnp.arange(NUM_PLACEMENT_TRIPLES)
 
@@ -165,9 +167,11 @@ def init_candidates(grid, tiles):
         "value_sum": jnp.zeros(NUM_CANDIDATES, dtype=jnp.float32),
     }
 
+@jax.jit
 def q_value(tree, i):
     return tree["value_sum"][i] / (tree["visits"][i] + 1e-8)
 
+@jax.jit
 def update(tree, idx, value):
     tree["visits"] = tree["visits"].at[idx].add(1)
     tree["value_sum"] = tree["value_sum"].at[idx].add(value)
