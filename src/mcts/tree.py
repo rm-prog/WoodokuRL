@@ -31,8 +31,8 @@ def valid_placements(grid, tile):
 
     actions = jnp.arange(NUM_ACTIONS)
 
-    grids = jax.vmap(
-        apply_move_flat,
+    grids, _, _ = jax.vmap(
+        step,
         in_axes=(None, None, 0)
     )(grid, tile, actions)
 
@@ -78,7 +78,7 @@ def check_placement_triple(grid, tiles, placements):
             tile = tiles[permutation[i]]
             placement = permuted_placements[i]
 
-            current_grid, placement_valid = apply_move_flat_valid(
+            current_grid, placement_valid, _ = step(
                 current_grid,
                 tile,
                 placement

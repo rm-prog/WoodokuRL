@@ -2,7 +2,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 from jax import lax
-from src.env.tiles import TILES
+from src.env.tiles import TILES, SHIFTED_TILES, SHIFTED_TILES_VALID
 from src.env.actions import step, has_valid_placements
 
 @partial(jax.jit, static_argnames=["func", "num_games"])
@@ -68,45 +68,37 @@ def simulate_games(key, num_games, func):
     scores = jax.vmap(run_one)(keys)
     return scores
 
+@jax.jit
+def all_tiles_valid_mask(field):
+    """For every tile (original TILES order), does it have >=1 legal placement
+    on `field`? One einsum over all (tile, row, col) at once."""
+    overlap = jnp.einsum('trcij,ij->trc', SHIFTED_TILES, field)   # (T, 9, 9)
+    legal = (overlap == 0) & SHIFTED_TILES_VALID                   # (T, 9, 9)
+    return jnp.any(legal, axis=(1, 2))                              # (T,)
+
+
+@jax.jit
 def generate_tiles(key, field):
-
     key, subkey = jax.random.split(key)
-    perm = jax.random.permutation(subkey, len(TILES))
-    shuffled_tiles = TILES[perm]
+    perm = jax.random.permutation(subkey, TILES.shape[0])
 
-    def check(tile):
-        valid, _ = has_valid_placements(field, tile)
-        return valid
-
-    valids = jax.vmap(check)(shuffled_tiles)
-
+    tile_has_valid = all_tiles_valid_mask(field)   # (T,), original tile order
+    valids = tile_has_valid[perm]                   # reordered to match shuffle
     has_any = jnp.any(valids)
 
     def pick(_):
         idx = jnp.argmax(valids.astype(jnp.int32))
-        first_tile = shuffled_tiles[idx]
-
-        key2, k1, k2 = jax.random.split(key, 3)
-        r1 = jax.random.randint(k1, (), 0, len(TILES))
-        r2 = jax.random.randint(k2, (), 0, len(TILES))
-
-        tile2 = TILES[r1]
-        tile3 = TILES[r2]
-
-        tiles = jnp.stack([first_tile, tile2, tile3])
-        return tiles
+        first_idx = perm[idx]
+        k1, k2 = jax.random.split(key)
+        r1 = jax.random.randint(k1, (), 0, TILES.shape[0])
+        r2 = jax.random.randint(k2, (), 0, TILES.shape[0])
+        return jnp.stack([first_idx, r1, r2])
 
     def fallback(_):
-        key2, k1, k2 = jax.random.split(key, 3)
-        r1 = jax.random.randint(k1, (), 0, len(TILES))
-        r2 = jax.random.randint(k2, (), 0, len(TILES))
-        r3 = jax.random.randint(key2, (), 0, len(TILES))
+        k0, k1, k2 = jax.random.split(key, 3)
+        r1 = jax.random.randint(k0, (), 0, TILES.shape[0])
+        r2 = jax.random.randint(k1, (), 0, TILES.shape[0])
+        r3 = jax.random.randint(k2, (), 0, TILES.shape[0])
+        return jnp.stack([r1, r2, r3])
 
-        return jnp.stack([TILES[r1], TILES[r2], TILES[r3]])
-
-    return lax.cond(
-        has_any,
-        pick,
-        fallback,
-        operand=None
-    )
+    return lax.cond(has_any, pick, fallback, operand=None)

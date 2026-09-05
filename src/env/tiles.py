@@ -254,6 +254,8 @@ TILES = jnp.stack([
                           [1, 1]])),
 ])
 
+TILE_SIZES = jnp.sum(TILES == 1, axis=(1, 2))
+
 _ROW_OFFSETS = jnp.arange(9)
 _COL_OFFSETS = jnp.arange(9)
 

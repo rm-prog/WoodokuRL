@@ -43,9 +43,9 @@ def test_identical_tiles(grid):
     ], dtype=jnp.int32)
 
     tiles = jnp.stack([
-        L,
-        cube,
-        single_cell,
+        0,
+        5,
+        5,
     ])
 
     tree = init_candidates(
@@ -108,10 +108,13 @@ test_identical_tiles(grid)
 # print("time for random policy: ", end-start)
 # print(result)
 
-result = run_mcts(make_dummy_grid(), jnp.stack([TILES[0], TILES[5], TILES[5]]))
-jax.block_until_ready(result)
 start = time.perf_counter()
-result = run_mcts(make_dummy_grid(), jnp.stack([TILES[0], TILES[5], TILES[5]]))
+result = run_mcts(grid, jnp.stack([0, 5, 5]))
+jax.block_until_ready(result)
+end = time.perf_counter()
+print("time for one turn, first run: ", end-start)
+start = time.perf_counter()
+result = run_mcts(grid, jnp.stack([0, 5, 5]))
 jax.block_until_ready(result)
 print(result)
 end = time.perf_counter()
