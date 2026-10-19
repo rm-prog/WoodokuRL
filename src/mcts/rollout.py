@@ -4,49 +4,55 @@ from jax import lax
 
 from src.env.actions import step
 from src.sim.simulation import generate_tiles
-from src.mcts.policy import hybrid_policy
 
 @jax.jit
-def rollout(grid, key, depth=10, eps=1.0):
+def rollout(grid, root_tiles, available_tiles, key, depth=5):
 
-    def body(carry, _):
-        grid, key, total_reward = carry
+    def rollout_from_available(tiles, available_tiles, key):
+        available_indices = jnp.nonzero(available_tiles, size=3, fill_value=0)[0]
+        num_available = jnp.sum(available_tiles)
+        key, subkey = jax.random.split(key)
+        random_index = jax.random.randint(subkey, (), 0, num_available)
+        chosen_tile_index = available_indices[random_index]
+        action = jax.random.randint(subkey, (), 0, 81)
+        new_grid, _, reward = step(grid, tiles[chosen_tile_index], action)
+        reward = jnp.asarray(reward, dtype=jnp.float32)
+        available_tiles = available_tiles.at[chosen_tile_index].set(False)
+        return new_grid, available_tiles, reward, key
 
+    def rollout_from_random(key):
         key, subkey = jax.random.split(key)
         tiles = generate_tiles(subkey, grid)
+        available_tiles = jnp.ones(3, dtype=jnp.bool_)
+        return rollout_from_available(tiles, available_tiles, key)
 
-        perm, a1, a2, a3, key, valid = hybrid_policy(
-            grid,
-            tiles,
-            key,
-            eps=eps,
-        )
-
-        ordered = jnp.take(tiles, perm, axis=0)
+    def body(carry, _):
+        grid, available_tiles, total_reward, key = carry
 
         def valid_path(_):
-            g1, _, r1 = step(grid, ordered[0], a1)
-            g2, _, r2 = step(g1, ordered[1], a2)
-            g3, _, r3 = step(g2, ordered[2], a3)
-
-            reward = r1 + r2 + r3
-            return (g3, key, total_reward + reward)
+            new_grid, new_available_tiles, reward, new_key = rollout_from_available(
+                root_tiles,
+                available_tiles,
+                key,
+            )
+            reward = jnp.asarray(reward, dtype=jnp.float32)
+            return (new_grid, new_available_tiles, total_reward + reward, new_key)
 
         def invalid_path(_):
-            return (grid, key, total_reward)
+            return rollout_from_random(key)
 
-        grid, key, total_reward = lax.cond(
-            valid,
+        grid, available_tiles, total_reward, key = lax.cond(
+            jnp.any(available_tiles),
             valid_path,
             invalid_path,
             operand=None
         )
 
-        return (grid, key, total_reward), None
+        return (grid, available_tiles, total_reward, key), None
 
-    (final_grid, _, total_reward), _ = lax.scan(
+    (final_grid, _, total_reward, _), _ = lax.scan(
         body,
-        (grid, key, 0.0),
+        (grid, available_tiles, 0.0, key),
         xs=None,
         length=depth,
     )
