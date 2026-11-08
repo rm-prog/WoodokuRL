@@ -19,13 +19,27 @@ def simulate_games(key, num_games, func):
             actions = jnp.array([a1, a2, a3])
 
             def apply_move(carry, x):
-                grid, score, alive = carry
-                tile, action = x
-                new_grid, valid, reward = step(grid, tile, action)
-                score = score + reward * valid
-                alive = alive & valid
-                grid = jnp.where(valid, new_grid, grid)
-                return (grid, score, alive), None
+                _,_, alive = carry
+                def illegal_move(carry):
+                    grid, score, alive = carry
+                    alive = jnp.bool_(False)
+                    return (grid, score, alive), None
+
+                def valid_move(carry):
+                    grid, score, alive = carry
+                    tile, action = x
+                    new_grid, valid, reward = step(grid, tile, action)
+                    score = score + reward * valid
+                    alive = alive & valid
+                    grid = jnp.where(valid, new_grid, grid)
+                    return (grid, score, alive), None
+
+                return lax.cond(
+                    alive & (x[1] >= 0),
+                    valid_move,
+                    illegal_move,
+                    operand=carry
+                )
 
             return lax.scan(
                 apply_move,

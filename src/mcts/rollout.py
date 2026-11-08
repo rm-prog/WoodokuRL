@@ -4,57 +4,120 @@ from jax import lax
 
 from src.env.actions import step
 from src.sim.simulation import generate_tiles
+from src.env.tiles import SHIFTED_TILES, SHIFTED_TILES_VALID
 
 @jax.jit
 def rollout(grid, root_tiles, available_tiles, key, depth=5):
 
-    def rollout_from_available(tiles, available_tiles, key):
-        available_indices = jnp.nonzero(available_tiles, size=3, fill_value=0)[0]
-        num_available = jnp.sum(available_tiles)
-        key, subkey = jax.random.split(key)
-        random_index = jax.random.randint(subkey, (), 0, num_available)
-        chosen_tile_index = available_indices[random_index]
-        action = jax.random.randint(subkey, (), 0, 81)
-        new_grid, _, reward = step(grid, tiles[chosen_tile_index], action)
-        reward = jnp.asarray(reward, dtype=jnp.float32)
-        available_tiles = available_tiles.at[chosen_tile_index].set(False)
-        return new_grid, available_tiles, reward, key
-
-    def rollout_from_random(key):
-        key, subkey = jax.random.split(key)
-        tiles = generate_tiles(subkey, grid)
-        available_tiles = jnp.ones(3, dtype=jnp.bool_)
-        return rollout_from_available(tiles, available_tiles, key)
-
-    def body(carry, _):
-        grid, available_tiles, total_reward, key = carry
-
-        def valid_path(_):
-            new_grid, new_available_tiles, reward, new_key = rollout_from_available(
-                root_tiles,
-                available_tiles,
-                key,
-            )
-            reward = jnp.asarray(reward, dtype=jnp.float32)
-            return (new_grid, new_available_tiles, total_reward + reward, new_key)
-
-        def invalid_path(_):
-            return rollout_from_random(key)
-
-        grid, available_tiles, total_reward, key = lax.cond(
-            jnp.any(available_tiles),
-            valid_path,
-            invalid_path,
-            operand=None
+    def rollout_from_available(current_grid, tiles, available_tiles, key):
+        next_key, sample_key = jax.random.split(key)
+        tile_slot, position, has_legal_move = sample_legal_move(
+            current_grid, tiles, available_tiles, sample_key
         )
 
-        return (grid, available_tiles, total_reward, key), None
+        def no_legal_move(_):
+            return (
+                current_grid,
+                available_tiles,
+                jnp.float32(0),
+                next_key,
+                jnp.bool_(False),
+            )
 
-    (final_grid, _, total_reward, _), _ = lax.scan(
+        def legal_move(_):
+            new_grid, valid, reward = step(
+                current_grid, tiles[tile_slot], position
+            )
+            new_available_tiles = available_tiles.at[tile_slot].set(False)
+            return (
+                jnp.where(valid, new_grid, current_grid),
+                new_available_tiles,
+                jnp.where(valid, reward, 0).astype(jnp.float32),
+                next_key,
+                valid,
+            )
+
+        return lax.cond(
+            has_legal_move, legal_move, no_legal_move, operand=None
+        )
+
+    def rollout_from_random(current_grid, key):
+        next_key, tiles_key = jax.random.split(key)
+        tiles = generate_tiles(tiles_key, current_grid)
+        available = jnp.ones(3, dtype=jnp.bool_)
+        return rollout_from_available(current_grid, tiles, available, next_key)
+
+    def body(carry, _):
+        grid, available, total_reward, key, active = carry
+
+        def do_move(_):
+            def use_root_tiles(_):
+                return rollout_from_available(grid, root_tiles, available, key)
+
+            def draw_new_tiles(_):
+                return rollout_from_random(grid, key)
+
+            new_grid, new_available, reward, new_key, has_move = lax.cond(
+                jnp.any(available),
+                use_root_tiles,
+                draw_new_tiles,
+                operand=None,
+            )
+            return (
+                new_grid,
+                new_available,
+                total_reward + reward,
+                new_key,
+                has_move,
+            )
+
+        def stay_inactive(_):
+            return carry
+
+        new_carry = lax.cond(active, do_move, stay_inactive, operand=None)
+        return new_carry, None
+
+    (final_grid, _, total_reward, _, _), _ = lax.scan(
         body,
-        (grid, available_tiles, 0.0, key),
+        (grid, available_tiles, 0.0, key, jnp.bool_(True)),
         xs=None,
         length=depth,
     )
 
     return total_reward
+
+
+def sample_legal_move(grid, tiles, available_tiles, key):
+    # tiles: three tile IDs; available_tiles: bool mask of shape (3,)
+    shifted = SHIFTED_TILES[tiles]  # (3, 9, 9, 9, 9)
+
+    overlaps = jnp.einsum(
+        "trcij,ij->trc",
+        shifted,
+        grid,
+    )  # (3, 9, 9)
+
+    legal = (
+        (overlaps == 0)
+        & SHIFTED_TILES_VALID[tiles]
+        & available_tiles[:, None, None]
+    ).reshape(-1)  # (3 * 81,)
+
+    legal_count = jnp.sum(legal)
+    legal_indices = jnp.nonzero(legal, size=243, fill_value=0)[0]
+
+    def sample(_):
+        choice = jax.random.randint(key, (), 0, legal_count)
+        flat_index = legal_indices[choice]
+        tile_slot = flat_index // 81
+        position = flat_index % 81
+        return tile_slot, position, jnp.bool_(True)
+
+    def no_legal_move(_):
+        return (
+            jnp.int32(-1),
+            jnp.int32(-1),
+            jnp.bool_(False),
+        )
+
+    return lax.cond(legal_count > 0, sample, no_legal_move, operand=None)
