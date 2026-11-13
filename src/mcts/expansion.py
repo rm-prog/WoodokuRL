@@ -76,10 +76,12 @@ def expand(tree, idx, grid, tiles, key):
         operand=None,
     )
 
+    chosen_action = tree["action_from_parent"][chosen_child]
+
     chosen_grid, _, _ = step(
         grid,
-        tiles[chosen_child // 81],
-        chosen_child % 81,
+        tiles[chosen_action // 81],
+        chosen_action % 81,
     )
 
     return tree, chosen_child, chosen_grid
