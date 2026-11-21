@@ -86,31 +86,6 @@ def select(tree, grid, root_tiles):
 
     return current_node, selected_grid
 
-# @jax.jit
-# def select(tree):
-#     valid = tree["valid"]
-#     unvisited = valid & (tree["visits"] == 0)
-
-#     def no_valid_move():
-#         return jnp.int32(-1)
-
-#     def select_unvisited():
-#         return jnp.argmax(unvisited)
-
-#     def select_by_ucb():
-#         scores = jnp.where(valid, ucb_score(tree), -jnp.inf)
-#         return jnp.argmax(scores)
-
-#     return jax.lax.cond(
-#         jnp.any(valid),
-#         lambda: jax.lax.cond(
-#             jnp.any(unvisited),
-#             select_unvisited,
-#             select_by_ucb,
-#         ),
-#         no_valid_move,
-#     )
-
 
 @partial(jax.jit, static_argnames=["batch_size"])
 def select_batch(tree, key, batch_size):
