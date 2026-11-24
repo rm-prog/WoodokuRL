@@ -82,7 +82,7 @@ def select(tree, grid, root_tiles):
     current_node, selected_grid, total_reward = jax.lax.while_loop(
         cond,
         select_child,
-        (0, grid),
+        (0, grid, jnp.float32(0.0)),
     )
 
     return current_node, selected_grid, total_reward

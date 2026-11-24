@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from src.config import MCTS_ITERS
 from src.env.actions import clear_lines, step
 from src.mcts.rollout import rollout
-from src.mcts.selection import select_batch, select
+from src.mcts.selection import select
 from src.mcts.expansion import expand
 from src.mcts.tree import init_tree, update, update_node, add_child
 from src.mcts.backprop import backprop

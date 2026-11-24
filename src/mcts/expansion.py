@@ -75,7 +75,7 @@ def expand(tree, idx, grid, tiles, key):
         operand=None,
     )
 
-    def child_found():
+    def child_found(_):
         chosen_action = tree["action_from_parent"][chosen_child]
         
         chosen_grid, _, reward = step(
@@ -86,8 +86,8 @@ def expand(tree, idx, grid, tiles, key):
         
         return tree, chosen_child, chosen_grid, reward
 
-    def no_child_found():
-        return tree, idx, grid, jnp.float32(0)
+    def no_child_found(_):
+        return tree, idx, grid, jnp.int32(0)
 
     return jax.lax.cond(
         chosen_child != -1,

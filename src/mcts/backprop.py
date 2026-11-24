@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from woodoku.src.mcts.tree import update_node
+from src.mcts.tree import update_node
 
 @jax.jit
 def backprop(tree, node_id, value):
