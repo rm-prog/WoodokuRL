@@ -14,7 +14,6 @@ def expand(tree, idx, grid, tiles, key):
         tile_idx = action // 81
         available_tiles = new_tree["tiles_available"][node_id].at[tile_idx].set(False)
         new_tree = add_child(new_tree, node_id, action, new_tree["depth"][node_id] + 1, child_id, available_tiles)
-        new_tree = update_node(new_tree, child_id, 0.0)
 
         return new_tree
 
@@ -76,13 +75,24 @@ def expand(tree, idx, grid, tiles, key):
         operand=None,
     )
 
-    chosen_action = tree["action_from_parent"][chosen_child]
+    def child_found():
+        chosen_action = tree["action_from_parent"][chosen_child]
+        
+        chosen_grid, _, reward = step(
+            grid,
+            tiles[chosen_action // 81],
+            chosen_action % 81,
+        )
+        
+        return tree, chosen_child, chosen_grid, reward
 
-    chosen_grid, _, _ = step(
-        grid,
-        tiles[chosen_action // 81],
-        chosen_action % 81,
+    def no_child_found():
+        return tree, idx, grid, jnp.float32(0)
+
+    return jax.lax.cond(
+        chosen_child != -1,
+        child_found,
+        no_child_found,
+        operand=None,
     )
-
-    return tree, chosen_child, chosen_grid
     

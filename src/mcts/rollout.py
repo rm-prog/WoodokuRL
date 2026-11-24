@@ -7,7 +7,7 @@ from src.sim.simulation import generate_tiles
 from src.env.tiles import SHIFTED_TILES, SHIFTED_TILES_VALID
 
 @jax.jit
-def rollout(grid, root_tiles, available_tiles, key, depth=5):
+def rollout(grid, root_tiles, available_tiles, key, previous_reward, depth=5):
 
     def rollout_from_available(current_grid, tiles, available_tiles, key):
         next_key, sample_key = jax.random.split(key)
@@ -84,7 +84,7 @@ def rollout(grid, root_tiles, available_tiles, key, depth=5):
         length=depth,
     )
 
-    return total_reward
+    return total_reward + previous_reward
 
 
 def sample_legal_move(grid, tiles, available_tiles, key):

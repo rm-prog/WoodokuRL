@@ -18,14 +18,13 @@ def q_value(tree):
     return tree["value_sum"] / (tree["visits"] + 1e-8)
 
 @jax.jit
-def run_mcts(grid, root_tiles, tiles_available):
+def run_mcts(grid, root_tiles, tiles_available, key):
     tree = init_tree()
     root = 0
 
     tree = add_child(tree, -1, -1, 0, root, tiles_available)
-    tree = update_node(tree, root, 0.0)
 
-    keys = jax.random.split(jax.random.key(0), MCTS_ITERS)
+    keys = jax.random.split(key, MCTS_ITERS)
 
     def body(tree, key):
         tree = mcts_iteration(tree, grid, root_tiles, key)
@@ -45,10 +44,11 @@ def run_mcts(grid, root_tiles, tiles_available):
 
 @jax.jit
 def mcts_iteration(tree, grid, root_tiles, key):
-    idx, selected_grid = select(tree, grid, root_tiles)
-    tree, chosen_child, chosen_grid = expand(tree, idx, selected_grid, root_tiles, key)
+    idx, selected_grid, total_reward = select(tree, grid, root_tiles)
+    tree, chosen_child, chosen_grid, reward = expand(tree, idx, selected_grid, root_tiles, key)
+    total_reward = total_reward + reward
     available_tiles = tree["tiles_available"][chosen_child]
-    value = rollout(chosen_grid, root_tiles, available_tiles, key)
+    value = rollout(chosen_grid, root_tiles, available_tiles, key, total_reward)
     tree = backprop(tree, chosen_child, value)
 
     return tree
@@ -59,7 +59,7 @@ def three_move_mcts(grid, tiles):
     available_tiles = jnp.ones(3, dtype=jnp.bool_)
 
     def one_mcts(grid, tiles, available_tiles, key):
-        action = run_mcts(grid, tiles, available_tiles)
+        action = run_mcts(grid, tiles, available_tiles, key)
 
         def valid_path(_):
             tile_idx = action // 81
